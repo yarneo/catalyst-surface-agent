@@ -5,6 +5,8 @@ window. It combines typed language-model interpretation with deterministic
 market-data verification, exact options risk, idempotent execution, continuous
 broker reconciliation, and a tamper-evident result ledger.
 
+[Open the live dashboard](https://catalyst-surface-agent.streamlit.app/)
+
 The current strategy is deliberately narrow: conditionally buy a near-the-money
 AVGO earnings straddle when the executable option surface is cheaper than a
 frozen threshold, then exit at the same next-morning horizon used in research.
