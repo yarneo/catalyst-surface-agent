@@ -1,0 +1,25 @@
+[project]
+name = "catalyst-surface-agent"
+version = "0.1.0"
+description = "Autonomous semantic event-convexity research agent."
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "plotly>=6.7.0",
+    "python-dotenv>=1.2.2",
+    "requests>=2.32.5",
+    "scipy>=1.17.1",
+    "streamlit>=1.57.0",
+    "yfinance>=1.4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trading_bot"]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1"]

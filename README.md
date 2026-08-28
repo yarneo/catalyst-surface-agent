@@ -1,0 +1,145 @@
+# Catalyst Surface Agent
+
+An autonomous paper-trading research agent for a short, fixed measurement
+window. It combines typed language-model interpretation with deterministic
+market-data verification, exact options risk, idempotent execution, continuous
+broker reconciliation, and a tamper-evident result ledger.
+
+The current strategy is deliberately narrow: conditionally buy a near-the-money
+AVGO earnings straddle when the executable option surface is cheaper than a
+frozen threshold, then exit at the same next-morning horizon used in research.
+All broader news-continuation, macro, and peer-spillover ideas remain disabled
+or shadow-only because their timestamped replays did not justify live orders.
+
+## What makes it different
+
+- **Magnitude instead of guessed direction.** The primary structure is a long
+  call plus long put, so the maximum loss is exactly the premium paid.
+- **Featherless as a bounded semantic gate.** A multi-model committee checks
+  source-grounded event integrity before entry and parses the release after it
+  arrives. It may veto risk; it cannot create an order, select quantity, relax a
+  limit, invent a ticker, or delay the exit.
+- **Alpaca MCP across the lifecycle.** The agent uses MCP for account state,
+  clock, news, stock data, option chains, historical option evidence, orders,
+  positions, activities, and portfolio history.
+- **Evidence before narrative.** Every tested idea—including rejected ones—is
+  retained with its method, result, limitation, and keep/reject decision.
+- **Autonomous but fail-closed.** Stale data, malformed model output, missing
+  quorum, wrong account, unknown order state, or reconciliation mismatch cannot
+  silently become a trade.
+
+## Frozen policy
+
+1. Observe the predeclared Broadcom earnings event.
+2. During the configured pre-close window, select the closest common-strike
+   call and put expiring at the end of the measurement week.
+3. Require executable premium no greater than 8.5% of spot, combined bid/ask
+   width no greater than 5%, each-leg width no greater than 15%, fresh
+   synchronized quotes, displayed size, and a valid semantic integrity quorum.
+4. Make at most one idempotent entry attempt and cap exact maximum loss at 25%
+   of current equity.
+5. Hold through the release and begin the exit at 09:45 ET the next session.
+   A later emergency flatten is independent of model availability.
+
+The timestamps and event identity currently live in
+[`scheduled.py`](src/trading_bot/tournament/scheduled.py). They are configuration
+facts, not model decisions.
+
+## Evidence snapshot
+
+The strongest replay uses expired option contracts and historical five-minute
+option trade bars obtained through Alpaca MCP. Across eight post-split AVGO
+events, the next-morning last-trade proxy returned +44.29% mean and +28.49%
+median on premium, with a 62.5% win rate. Under the frozen 8.5%-of-spot premium
+gate, six events remained: +48.42% mean and 66.7% wins.
+
+A deliberately adverse envelope—buying each leg at its highest entry-window
+trade and selling at its lowest exit-window trade—averaged +18.06% across all
+eight and +21.30% across the gated six. This is historical option-trade-bar
+evidence, **not** an NBBO fill backtest. The sample is small, leg trades need not
+be simultaneous, and paper execution does not model market impact or queue
+position. Full methods and event-level outcomes are in
+[`research/strategy-evidence/`](research/strategy-evidence/).
+
+## Architecture
+
+```text
+one-minute supervisor
+        |
+        v
+Alpaca MCP discovery + account truth
+        |
+        +----> Featherless typed committee
+        |          |
+        |          v
+        |     non-expansive integrity veto
+        v
+deterministic surface + exact-risk gates
+        |
+        v
+idempotent multi-leg order + reconciliation
+        |
+        v
+hash-chained JSONL evidence + read-only dashboard
+```
+
+Key modules:
+
+- `scripts/run_event_agent.py` — one autonomous cycle; shadow mode by default.
+- `src/trading_bot/tournament/scheduled.py` — frozen surface and lifecycle gates.
+- `src/trading_bot/tournament/featherless.py` — concurrent typed model router.
+- `src/trading_bot/tournament/integrity.py` — semantic veto boundary.
+- `src/trading_bot/tournament/decision.py` — exact contract-level risk planner.
+- `src/trading_bot/tournament/audit.py` — hash-chained, secret-redacting ledger.
+- `src/trading_bot/options/` — chain, payoff, order, registry, and MCP mechanics.
+- `app/streamlit_app.py` — read-only strategy, evidence, and P&L dashboard.
+
+## Setup
+
+Python 3.12 and [`uv`](https://docs.astral.sh/uv/) are recommended.
+
+```bash
+uv sync
+cp .env.example .env.local
+uv run pytest tests/ -q
+```
+
+Fill `.env.local` with dedicated paper-account and Featherless credentials.
+Secret files, mutable books, ledgers, logs, caches, and Streamlit secrets are
+ignored by Git.
+
+Run one fully connected **shadow** cycle:
+
+```bash
+uv run python scripts/run_event_agent.py \
+  --env .env.local \
+  --featherless-env .env.local \
+  --book data/event_book.json \
+  --ledger data/event_evidence.jsonl
+```
+
+Shadow mode can read real market/account data but has no broker write path.
+Paper orders require both the `--enable-orders` flag and the explicit
+`TOURNAMENT_ENABLE_ORDERS=YES` environment switch. Do not enable either against
+a live-money account.
+
+Run the dashboard:
+
+```bash
+uv run streamlit run app/streamlit_app.py
+```
+
+## Safety model
+
+- Paper trading only; no live-money support is intended.
+- Credentials and account identifiers never belong in source, prompts, logs,
+  examples, screenshots, fixtures, or issues.
+- Every structure must have a finite positive maximum loss before planning.
+- Orders use stable client IDs; a lost response is recovered before any retry.
+- A registry mismatch blocks new risk but never blocks required exits.
+- Model or data failure may remove an entry, never remove the exit deadline.
+- Research metrics, paper fills, current-surface calculations, and measured P&L
+  remain separately labeled.
+
+This repository is research software, not investment advice. Paper performance
+does not establish live execution quality or a durable trading edge.

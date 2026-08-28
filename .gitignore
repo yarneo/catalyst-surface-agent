@@ -1,0 +1,17 @@
+__pycache__/
+*.py[oc]
+.DS_Store
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+data/
+logs/
+reports/
+*.bak
+*.tmp
