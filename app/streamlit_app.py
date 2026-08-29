@@ -72,6 +72,26 @@ st.set_page_config(page_title="Catalyst Surface Agent", page_icon="⚡",
                    layout="wide", initial_sidebar_state="expanded")
 
 
+def _stretch_kwarg() -> dict[str, object]:
+    """Return the full-width keyword this Streamlit build understands.
+
+    Streamlit renamed ``use_container_width`` to ``width`` in 1.49. Passing the
+    wrong one raises TypeError mid-script, which leaves the sidebar rendered and
+    the whole page below it blank. The deployed environment does not always
+    match the pin, so resolve the name once rather than trusting the version.
+    """
+    try:
+        major, minor = (int(part) for part in st.__version__.split(".")[:2])
+    except ValueError:
+        return {"width": "stretch"}
+    if (major, minor) >= (1, 49):
+        return {"width": "stretch"}
+    return {"use_container_width": True}
+
+
+STRETCH = _stretch_kwarg()
+
+
 def _credentials() -> tuple[str | None, str | None]:
     try:
         return st.secrets["ALPACA_API_KEY"], st.secrets["ALPACA_SECRET_KEY"]
@@ -246,7 +266,7 @@ st.sidebar.markdown(
     f"**Final cutoff:** {DEADLINE:%a %b %d, %H:%M} ET"
 )
 st.sidebar.metric("Time to cutoff", _remaining(DEADLINE - now))
-if st.sidebar.button("Refresh", width="stretch"):
+if st.sidebar.button("Refresh", **STRETCH):
     st.cache_data.clear()
     st.rerun()
 
@@ -320,7 +340,7 @@ with tabs[0]:
                 "Result": "✅ Pass" if fresh else "❌ Not tradable",
             },
         ]
-        st.dataframe(gate_rows, width="stretch", hide_index=True)
+        st.dataframe(gate_rows, hide_index=True, **STRETCH)
         st.warning(
             "Bottom line: this Saturday snapshot is useful diagnostics, but it "
             "would not permit a trade. Wednesday's fresh snapshot makes the real decision."
@@ -358,7 +378,7 @@ with tabs[1]:
         "We are not predicting whether earnings are good or bad. We are buying "
         "movement only when the option price and liquidity remain acceptable."
     )
-    st.dataframe(DECISIONS, width="stretch", hide_index=True)
+    st.dataframe(DECISIONS, hide_index=True, **STRETCH)
 
     st.subheader("What Featherless contributes")
     if semantic_row:
@@ -379,14 +399,14 @@ with tabs[1]:
             f"the latest result was **{committee.get('reason', 'unavailable')}**."
         )
         with st.expander("Model-by-model results"):
-            st.dataframe(committee.get("attempts") or [], width="stretch",
-                         hide_index=True)
+            st.dataframe(committee.get("attempts") or [],
+                         hide_index=True, **STRETCH)
             st.dataframe([{
                 "Audit": f"#{row.sequence}",
                 "Outcome": row.payload.get("committee", {}).get("reason"),
                 "Integrity clear": row.payload.get("event_integrity", {}).get("clear"),
                 "Hash": row.hash[:12],
-            } for row in reversed(semantic_rows)], width="stretch", hide_index=True)
+            } for row in reversed(semantic_rows)], hide_index=True, **STRETCH)
     else:
         st.info("No semantic preflight is available yet.")
 
@@ -404,7 +424,7 @@ with tabs[1]:
         fig.add_hline(y=0, line_color="#888")
         fig.update_layout(height=380, yaxis_title="premium return (%)",
                           margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, **STRETCH)
 
     if surface_row:
         diagnostic = surface_row.payload.get("diagnostic", {})
@@ -420,7 +440,7 @@ with tabs[1]:
                                 annotation_text="spot")
                 smile.update_layout(height=330, xaxis_title="strike",
                                     yaxis_title="implied volatility (%)")
-                st.plotly_chart(smile, width="stretch")
+                st.plotly_chart(smile, **STRETCH)
             st.caption(
                 f"{diagnostic.get('point_count', '—')} paired strikes · "
                 f"{diagnostic.get('shape', '—')} · diagnostic only · gate unchanged"
@@ -449,13 +469,13 @@ with tabs[2]:
             "Symbol": row.get("symbol"), "Qty": row.get("qty"),
             "Market value": row.get("market_value"),
             "Unrealized P&L": row.get("unrealized_pl"),
-        } for row in positions], width="stretch", hide_index=True)
+        } for row in positions], hide_index=True, **STRETCH)
     if book is not None and book.entries:
         st.dataframe([{
             "ID": row.id, "Structure": row.structure, "Qty": row.qty,
             "Entry": row.entry, "Max loss": row.max_loss * 100 * row.qty,
             "Opened": row.opened_at, "Closed": row.closed_at,
-        } for row in reversed(book.entries)], width="stretch", hide_index=True)
+        } for row in reversed(book.entries)], hide_index=True, **STRETCH)
 
     st.subheader("Autonomous loop")
     st.code(
@@ -478,7 +498,7 @@ with tabs[2]:
                 "Recorded ET": row.recorded_at,
                 "Event": row.event_type,
                 "Hash": row.hash[:12],
-            } for row in latest], width="stretch", hide_index=True)
+            } for row in latest], hide_index=True, **STRETCH)
             selected = st.selectbox(
                 "Inspect evidence row", options=latest,
                 format_func=lambda row: f"#{row.sequence} · {row.event_type}")

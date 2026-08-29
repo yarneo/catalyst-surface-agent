@@ -3,6 +3,8 @@ name = "catalyst-surface-agent"
 version = "0.1.0"
 description = "Autonomous semantic event-convexity research agent."
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "numpy>=2.4.6",
     "pandas>=3.0.3",
