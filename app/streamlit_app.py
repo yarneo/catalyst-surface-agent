@@ -139,48 +139,62 @@ def _remaining(value: dt.timedelta) -> str:
     return f"{days}d {hours}h {minutes}m"
 
 
+def _runtime_mode() -> str:
+    value = os.getenv("TOURNAMENT_ENABLE_ORDERS")
+    if value is None:
+        try:
+            value = st.secrets.get("TOURNAMENT_ENABLE_ORDERS")
+        except Exception:  # noqa: BLE001
+            value = None
+    if value is None:
+        from dotenv import dotenv_values
+        value = dotenv_values(ROOT / ".env.local").get(
+            "TOURNAMENT_ENABLE_ORDERS")
+    if value == "YES":
+        return "ORDER-ENABLED"
+    return "SHADOW" if value == "NO" else "PUBLIC DEMO"
+
+
+def _phase(now: dt.datetime, *, has_position: bool) -> tuple[str, str, str]:
+    if now < START:
+        return (
+            "PREFLIGHT", "WAIT",
+            f"No trading yet. Measurement begins {START:%a %b %d at %H:%M ET}.",
+        )
+    if has_position:
+        if now >= POLICY.exit_at:
+            return (
+                "EXITING", "EXIT",
+                "The fixed exit time has arrived; the agent keeps trying until flat.",
+            )
+        return (
+            "POSITION OPEN", "HOLD",
+            f"Hold through the event, then exit {POLICY.exit_at:%a at %H:%M ET}.",
+        )
+    if now < POLICY.entry_start:
+        return (
+            "OBSERVING", "WAIT",
+            f"Watching only. Entry evaluation starts {POLICY.entry_start:%a at %H:%M ET}.",
+        )
+    if now <= POLICY.entry_end:
+        return (
+            "ENTRY WINDOW", "EVALUATE",
+            "Fresh quotes and every frozen gate must pass; otherwise the action is no trade.",
+        )
+    return (
+        "COMPLETE", "NO NEW TRADE",
+        "The one permitted entry window has passed.",
+    )
+
+
 now = now_et()
-st.sidebar.title("Catalyst Surface Agent")
-st.sidebar.caption("Yar + Starboi · autonomous research deployment")
-st.sidebar.metric("Measured window", _remaining(DEADLINE - now),
-                  "remaining" if now < DEADLINE else "complete",
-                  delta_color="off")
-st.sidebar.markdown(
-    f"**Start:** {START:%a %b %d, %H:%M} ET  \n"
-    f"**Entry:** {POLICY.entry_start:%a %b %d, %H:%M}–"
-    f"{POLICY.entry_end:%H:%M} ET  \n"
-    f"**Exit:** {POLICY.exit_at:%a %b %d, %H:%M} ET  \n"
-    f"**Cutoff:** {DEADLINE:%a %b %d, %H:%M} ET"
-)
-if st.sidebar.button("Refresh", width="stretch"):
-    st.cache_data.clear()
-    st.rerun()
-
-st.title("A general event-convexity engine, currently deployed on AVGO")
-st.caption(
-    "The reusable engine discovers and interprets scheduled catalysts, measures "
-    "option surfaces, applies frozen risk policy, executes, reconciles, and exits. "
-    "The current measured deployment is one conditional, direction-neutral AVGO "
-    "earnings straddle—not the boundary of what the engine can run."
-)
-
-engine_col, deployment_col = st.columns(2)
-with engine_col:
-    st.info(
-        "**General engine**  \nScheduled-event facts → semantic surprise vector "
-        "→ surface diagnostics → deterministic gates → managed lifecycle"
-    )
-with deployment_col:
-    st.success(
-        "**Current deployment**  \nAVGO Q3 FY2026 · Sep 4 ATM straddle · one "
-        "conditional entry · exact max loss · predeclared exit"
-    )
-
 try:
     account_payload = _account()
 except Exception as exc:  # noqa: BLE001
     account_payload = None
-    st.warning(f"Replacement account unavailable: {type(exc).__name__}: {exc}")
+    account_error = f"{type(exc).__name__}: {exc}"
+else:
+    account_error = None
 
 try:
     audit = _audit_rows()
@@ -208,260 +222,280 @@ if account_payload:
     equity = float(account_payload["account"]["equity"])
     positions = account_payload["positions"]
 
-c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Equity", f"${equity:,.2f}" if equity is not None else "Awaiting account",
-          f"${equity - 100_000:+,.2f}" if equity is not None else None)
-c2.metric("Measured P&L",
-          f"{(equity / 100_000 - 1):+.2%}" if equity is not None else "—")
-c3.metric("Open broker legs", len(positions))
-c4.metric("Max-loss ceiling", "25%", "$25,000 at start", delta_color="off")
-c5.metric("Evidence chain", "verified" if audit_ok else "failed",
-          f"{len(audit)} rows", delta_color="off")
-c6.metric("Preflight", "verified" if preflight_ok else "failed",
-          f"{len(preflight)} rows", delta_color="off")
+mode = _runtime_mode()
+phase, action, explanation = _phase(now, has_position=bool(positions))
+rehearsal = _latest(preflight, "rehearsal_summary")
+surface_row = _latest(preflight, "surface_diagnostic")
+semantic_rows = [row for row in preflight
+                 if row.event_type == "featherless_preflight"]
+semantic_row = semantic_rows[-1] if semantic_rows else None
 
-tabs = st.tabs(["Current deployment", "Rejected strategies", "Agent trace",
-                "Positions & P&L", "Technical method"])
+st.sidebar.title("Catalyst Surface Agent")
+st.sidebar.caption("Yar + Starboi")
+st.sidebar.markdown("**How to read this**")
+st.sidebar.markdown(
+    "1. Start with **Current action**.  \n"
+    "2. Check whether the gates pass.  \n"
+    "3. Open details only if you want proof."
+)
+st.sidebar.divider()
+st.sidebar.markdown(
+    f"**Entry check:** {POLICY.entry_start:%a %b %d, %H:%M}–"
+    f"{POLICY.entry_end:%H:%M} ET  \n"
+    f"**Planned exit:** {POLICY.exit_at:%a %b %d, %H:%M} ET  \n"
+    f"**Final cutoff:** {DEADLINE:%a %b %d, %H:%M} ET"
+)
+st.sidebar.metric("Time to cutoff", _remaining(DEADLINE - now))
+if st.sidebar.button("Refresh", width="stretch"):
+    st.cache_data.clear()
+    st.rerun()
+
+st.title("Catalyst Surface Agent")
+st.caption(
+    "A reusable scheduled-event engine. Current deployment: one conditional, "
+    "direction-neutral AVGO earnings trade."
+)
+
+st.info(
+    f"### Current action: {action}\n"
+    f"**{phase} · {mode}** — {explanation}"
+)
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Mode", mode)
+m2.metric("Position", "FLAT" if not positions else f"{len(positions)} leg(s)")
+m3.metric(
+    "Measured P&L",
+    "Not started" if now < START else
+    f"${equity - 100_000:+,.2f}" if equity is not None else "Not published",
+)
+m4.metric(
+    "Evidence health",
+    "VERIFIED" if audit_ok and preflight_ok else "FAILED",
+    f"{len(preflight)} preflight · {len(audit)} runtime",
+    delta_color="off",
+)
+
+tabs = st.tabs(["Overview", "Decision evidence", "Operations & audit"])
 
 with tabs[0]:
-    st.subheader("Frozen current-deployment policy")
-    left, right = st.columns([1.35, 1])
-    with left:
-        st.markdown(
-            """
-1. Observe only the predeclared Broadcom Q3 FY2026 earnings event.
-2. During **Wed Sep 2, 15:20–15:40 ET**, select the closest common-strike Sep 4
-   call and put.
-3. Require marketable premium ≤ **8.5% of spot**, total width ≤ **5%**, each-leg
-   width ≤ **15%**, fresh synchronized quotes, displayed size, and a valid
-   Featherless integrity quorum.
-4. Buy once, with exact maximum loss capped at **25% of equity**. Never chase a
-   confirmed non-fill.
-5. Hold through the after-close release and begin the close **Thu at 09:45 ET**.
-   Emergency flat-by is 15:30 ET; nothing is intentionally carried to Friday.
-            """
-        )
-    with right:
-        st.info(
-            "Featherless has asymmetric authority: a grounded indication that "
-            "results/guidance arrived early can veto entry. It cannot add a "
-            "trade, choose size, relax a surface gate, or delay the exit."
-        )
-        st.metric("Gated historical proxy", "+48.42% mean on premium")
-        st.metric("Gated win rate", "66.7%", "6 post-split events",
-                  delta_color="off")
-        st.metric("Worst gated adverse envelope", "-75.57% on premium",
-                  "≈ -18.9% account at 25% allocation", delta_color="off")
+    st.subheader("What happens next")
+    step1, step2, step3 = st.columns(3)
+    with step1:
+        st.markdown("#### 1 · Observe")
+        st.write("Now through Wednesday: stay flat and keep checking account, data, and event integrity.")
+    with step2:
+        st.markdown("#### 2 · Decide")
+        st.write("Wednesday 15:20–15:40 ET: buy the straddle only if every frozen gate passes.")
+    with step3:
+        st.markdown("#### 3 · Exit")
+        st.write("Thursday 09:45 ET: close. At 15:30 ET, any unresolved close is an emergency.")
 
-    import plotly.graph_objects as go
-    dates = [row[0] for row in STRADDLES]
-    proxy = [row[2] for row in STRADDLES]
-    adverse = [row[3] for row in STRADDLES]
-    colors = ["#7ec88c" if value > 0 else "#ef6b73" for value in proxy]
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=dates, y=proxy, name="last-trade proxy",
-                         marker_color=colors))
-    fig.add_trace(go.Scatter(x=dates, y=adverse, name="adverse envelope",
-                             mode="lines+markers", line=dict(color="#f5a97c")))
-    fig.add_hline(y=0, line_color="#888")
-    fig.update_layout(height=400, yaxis_title="premium return (%)",
-                      margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified")
-    st.plotly_chart(fig, width="stretch")
-    st.caption(
-        "Actual Alpaca MCP historical option trade bars, not a historical NBBO "
-        "fill backtest. The adverse envelope buys each leg at its highest entry-"
-        "window trade and sells at its lowest exit-window trade."
-    )
-
-with tabs[1]:
-    st.subheader("What failed—and how it changed the strategy")
-    st.dataframe(DECISIONS, width="stretch", hide_index=True)
-    st.markdown(
-        "The final policy is intentionally narrow because the direct-news, "
-        "NFP-to-BTC, AVGO continuation, peer-spillover, and ISM variants did "
-        "not survive their first timestamped falsification. The executable "
-        "research programs and event-level results remain in the repository; "
-        "rejected ideas are not deleted from the story."
-    )
-    st.warning(
-        "Evidence classes stay separate: paper fills, stock/crypto event studies, "
-        "historical option-trade-bar proxies, current-surface calculations, and "
-        "actual measured-window P&L are never relabeled as one another."
-    )
-
-with tabs[2]:
-    st.subheader("One autonomous decision, from observation to evidence")
-
-    rehearsal = _latest(preflight, "rehearsal_summary")
-    surface_row = _latest(preflight, "surface_diagnostic")
-    semantic_rows = [row for row in preflight
-                     if row.event_type == "featherless_preflight"]
-    semantic_row = semantic_rows[-1] if semantic_rows else None
-
-    if rehearsal:
-        value = rehearsal.payload
-        st.success(
-            f"Rehearsal: {value.get('passed_count')}/{value.get('total_count')} "
-            f"drills passed · gate changed: {value.get('order_gate_changed')} · "
-            f"audit #{rehearsal.sequence} ({rehearsal.hash[:12]})"
-        )
-
-    st.markdown("#### Live AVGO surface diagnostic")
+    st.divider()
+    st.subheader("Latest surface check")
     if surface_row:
         diagnostic = surface_row.payload.get("diagnostic", {})
-        s1, s2, s3, s4 = st.columns(4)
-        s1.metric("Paired strikes", diagnostic.get("point_count", "—"))
-        s2.metric("Fitted shape", diagnostic.get("shape", "—"))
-        curvature = diagnostic.get("quadratic_curvature_per_log_moneyness_pct2")
-        s3.metric("Curvature", f"{curvature:+.6f}" if curvature is not None else "—")
         premium = diagnostic.get("executable_premium_to_spot")
-        s4.metric("Nearest premium / spot",
-                  f"{premium:.2%}" if premium is not None else "—")
-        points = diagnostic.get("points") or []
-        if points:
-            import plotly.graph_objects as go
-            smile = go.Figure(go.Scatter(
-                x=[point["strike"] for point in points],
-                y=[100 * point["mean_iv"] for point in points],
-                mode="lines+markers", name="paired call/put mean IV",
-                line=dict(color="#7dc4e4")))
-            smile.add_vline(x=diagnostic.get("spot"), line_dash="dash",
-                            annotation_text="spot")
-            smile.update_layout(
-                height=330, xaxis_title="strike", yaxis_title="implied volatility (%)",
-                margin=dict(l=10, r=10, t=20, b=10))
-            st.plotly_chart(smile, width="stretch")
+        width = diagnostic.get("total_spread_pct")
         fresh = bool(surface_row.payload.get("fresh_for_entry"))
+        gate_rows = [
+            {
+                "Gate": "Premium / spot",
+                "Observed": f"{premium:.2%}" if premium is not None else "—",
+                "Required": "≤ 8.50%",
+                "Result": "✅ Under limit" if premium is not None and premium <= 0.085
+                else "❌ Over limit",
+            },
+            {
+                "Gate": "Combined bid/ask width",
+                "Observed": f"{width:.2%}" if width is not None else "—",
+                "Required": "≤ 5.00%",
+                "Result": "✅ Pass" if width is not None and width <= 0.05
+                else "❌ Too wide",
+            },
+            {
+                "Gate": "Fresh, live quotes",
+                "Observed": "Fresh" if fresh else "Closed-market snapshot",
+                "Required": "Fresh during entry",
+                "Result": "✅ Pass" if fresh else "❌ Not tradable",
+            },
+        ]
+        st.dataframe(gate_rows, width="stretch", hide_index=True)
         st.warning(
-            f"Diagnostic only · fresh for entry: {fresh} · policy gate changed: "
-            f"{diagnostic.get('policy_gate_changed', False)}. The Saturday capture "
-            "is a dated Friday-close observation, not executable evidence."
+            "Bottom line: this Saturday snapshot is useful diagnostics, but it "
+            "would not permit a trade. Wednesday's fresh snapshot makes the real decision."
         )
     else:
-        st.info("No audited multi-strike surface capture is available yet.")
+        st.info("No surface snapshot has been captured yet.")
 
-    st.markdown("#### Featherless surprise vector and failure trail")
+    st.subheader("Why this trade is still only conditional")
+    h1, h2, h3 = st.columns(3)
+    h1.metric("Historical gated sample", "6 events")
+    h2.metric("Last-trade proxy", "+48.42% mean", "4 of 6 positive",
+              delta_color="off")
+    h3.metric("Worst adverse proxy", "-75.57% premium",
+              "≈ -18.9% account", delta_color="off")
+    st.caption(
+        "These are historical option-trade-bar proxies, not guaranteed returns "
+        "or historical marketable fills. The live gate decides whether to trade."
+    )
+
+    with st.expander("Exact frozen rules"):
+        st.markdown(
+            """
+- Evaluate only **Wed Sep 2, 15:20–15:40 ET**.
+- Buy the closest common-strike Sep 4 call and put.
+- Require premium/spot ≤ **8.5%**, total width ≤ **5%**, each leg ≤ **15%**,
+  fresh synchronized quotes with displayed size, and a valid Featherless quorum.
+- Make one entry attempt; maximum loss is capped at **25% of equity**.
+- Exit Thu at **09:45 ET**; emergency flat-by is **15:30 ET**.
+            """
+        )
+
+with tabs[1]:
+    st.subheader("Why AVGO survived the research")
+    st.write(
+        "We are not predicting whether earnings are good or bad. We are buying "
+        "movement only when the option price and liquidity remain acceptable."
+    )
+    st.dataframe(DECISIONS, width="stretch", hide_index=True)
+
+    st.subheader("What Featherless contributes")
     if semantic_row:
         vector = semantic_row.payload.get("surprise_vector") or {}
         committee = semantic_row.payload.get("committee") or {}
-        f1, f2, f3, f4, f5 = st.columns(5)
-        f1.metric("Novelty", f"{vector.get('novelty', 0):.2f}")
-        f2.metric("Surprise", f"{vector.get('surprise', 0):.2f}")
+        f1, f2, f3, f4 = st.columns(4)
+        f1.metric("Surprise", f"{vector.get('surprise', 0):.2f}")
+        f2.metric("Novelty", f"{vector.get('novelty', 0):.2f}")
         f3.metric("Confidence", f"{vector.get('confidence', 0):.2f}")
-        f4.metric("Direction", vector.get("direction", "no quorum"))
-        f5.metric("Half-life", f"{vector.get('expected_half_life_minutes', 0)}m")
-        st.dataframe([{
-            "Audit": f"#{row.sequence}",
-            "Recorded": row.recorded_at,
-            "Outcome": row.payload.get("committee", {}).get("reason"),
-            "Integrity clear": row.payload.get("event_integrity", {}).get("clear"),
-            "Hash": row.hash[:12],
-        } for row in reversed(semantic_rows)], width="stretch", hide_index=True)
-        st.dataframe(committee.get("attempts") or [], width="stretch", hide_index=True)
-        authority = semantic_row.payload.get("authority") or {}
-        st.caption(
-            f"Authority: {authority.get('mode')} · can authorize this entry: "
-            f"{authority.get('entry_authorized_by_this_artifact')} · policy gate "
-            f"changed: {authority.get('policy_gate_changed')}"
+        f4.metric("Interpretation", vector.get("direction", "no quorum"))
+        st.info(
+            "Featherless can veto entry if the scheduled uncertainty appears to "
+            "have resolved early. It cannot create a trade, change size, relax a "
+            "market gate, or delay the exit."
         )
-        lifecycle = semantic_row.payload.get("mcp_lifecycle") or {}
-        st.code(
-            f"Alpaca MCP: {lifecycle.get('tools_available', '—')} tools available\n"
-            f"Observed here: {' → '.join(lifecycle.get('tools_used') or [])}\n"
-            "Runtime: account → positions → clock/news/snapshot/chain → order → "
-            "reconciliation → activities/portfolio history",
-            language="text",
+        st.write(
+            "Reliability trail: the first live committee failed closed at 0/3; "
+            f"the latest result was **{committee.get('reason', 'unavailable')}**."
         )
+        with st.expander("Model-by-model results"):
+            st.dataframe(committee.get("attempts") or [], width="stretch",
+                         hide_index=True)
+            st.dataframe([{
+                "Audit": f"#{row.sequence}",
+                "Outcome": row.payload.get("committee", {}).get("reason"),
+                "Integrity clear": row.payload.get("event_integrity", {}).get("clear"),
+                "Hash": row.hash[:12],
+            } for row in reversed(semantic_rows)], width="stretch", hide_index=True)
     else:
-        st.info("No live semantic preflight is available yet.")
+        st.info("No semantic preflight is available yet.")
 
-    st.markdown("#### Hash-chained runtime evidence")
-    if not audit:
-        st.info("No measured-window cycles have been recorded yet.")
-    else:
-        latest = list(reversed(audit[-100:]))
-        st.dataframe([
-            {
+    with st.expander("Historical event chart"):
+        import plotly.graph_objects as go
+        dates = [row[0] for row in STRADDLES]
+        proxy = [row[2] for row in STRADDLES]
+        adverse = [row[3] for row in STRADDLES]
+        colors = ["#7ec88c" if value > 0 else "#ef6b73" for value in proxy]
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=dates, y=proxy, name="last-trade proxy",
+                             marker_color=colors))
+        fig.add_trace(go.Scatter(x=dates, y=adverse, name="adverse envelope",
+                                 mode="lines+markers", line=dict(color="#f5a97c")))
+        fig.add_hline(y=0, line_color="#888")
+        fig.update_layout(height=380, yaxis_title="premium return (%)",
+                          margin=dict(l=10, r=10, t=30, b=10))
+        st.plotly_chart(fig, width="stretch")
+
+    if surface_row:
+        diagnostic = surface_row.payload.get("diagnostic", {})
+        points = diagnostic.get("points") or []
+        with st.expander("Multi-strike smile diagnostic"):
+            if points:
+                import plotly.graph_objects as go
+                smile = go.Figure(go.Scatter(
+                    x=[point["strike"] for point in points],
+                    y=[100 * point["mean_iv"] for point in points],
+                    mode="lines+markers", name="paired call/put mean IV"))
+                smile.add_vline(x=diagnostic.get("spot"), line_dash="dash",
+                                annotation_text="spot")
+                smile.update_layout(height=330, xaxis_title="strike",
+                                    yaxis_title="implied volatility (%)")
+                st.plotly_chart(smile, width="stretch")
+            st.caption(
+                f"{diagnostic.get('point_count', '—')} paired strikes · "
+                f"{diagnostic.get('shape', '—')} · diagnostic only · gate unchanged"
+            )
+
+with tabs[2]:
+    st.subheader("Operational health")
+    o1, o2, o3 = st.columns(3)
+    o1.metric("Rehearsal", (
+        f"{rehearsal.payload.get('passed_count')}/"
+        f"{rehearsal.payload.get('total_count')} passed"
+        if rehearsal else "Not recorded"))
+    o2.metric("Broker view", "Connected" if account_payload else "Private runtime")
+    o3.metric("Open broker legs", len(positions))
+
+    if account_error:
+        st.warning(f"Broker read unavailable: {account_error}")
+    elif account_payload is None:
+        st.info(
+            "The public dashboard intentionally has no broker credentials. "
+            "Live account state stays in the private runtime."
+        )
+
+    if positions:
+        st.dataframe([{
+            "Symbol": row.get("symbol"), "Qty": row.get("qty"),
+            "Market value": row.get("market_value"),
+            "Unrealized P&L": row.get("unrealized_pl"),
+        } for row in positions], width="stretch", hide_index=True)
+    if book is not None and book.entries:
+        st.dataframe([{
+            "ID": row.id, "Structure": row.structure, "Qty": row.qty,
+            "Entry": row.entry, "Max loss": row.max_loss * 100 * row.qty,
+            "Opened": row.opened_at, "Closed": row.closed_at,
+        } for row in reversed(book.entries)], width="stretch", hide_index=True)
+
+    st.subheader("Autonomous loop")
+    st.code(
+        """Every minute
+  Alpaca MCP reads account, clock, news, stock and option data
+  → Featherless returns a typed, grounded integrity assessment
+  → deterministic code applies price, liquidity, risk and time gates
+  → Alpaca MCP executes/reconciles when—and only when—eligible
+  → results enter the hash-chained evidence ledger""",
+        language="text",
+    )
+
+    with st.expander("Measured-window audit rows"):
+        if not audit:
+            st.info("No measured-window cycles are published yet.")
+        else:
+            latest = list(reversed(audit[-100:]))
+            st.dataframe([{
                 "Sequence": row.sequence,
                 "Recorded ET": row.recorded_at,
                 "Event": row.event_type,
                 "Hash": row.hash[:12],
-                "Previous": row.previous_hash[:12],
-            }
-            for row in latest
-        ], width="stretch", hide_index=True)
-        selected = st.selectbox(
-            "Inspect evidence row",
-            options=latest,
-            format_func=lambda row: f"#{row.sequence} · {row.event_type} · {row.recorded_at}")
-        st.json(_display_safe(selected.payload))
-    st.markdown(
-        "Each row includes the previous row's SHA-256 digest. Editing, removing, "
-        "or reordering a past decision breaks verification. Sensitive config "
-        "keys are redacted before persistence."
-    )
+            } for row in latest], width="stretch", hide_index=True)
+            selected = st.selectbox(
+                "Inspect evidence row", options=latest,
+                format_func=lambda row: f"#{row.sequence} · {row.event_type}")
+            st.json(_display_safe(selected.payload))
 
-with tabs[3]:
-    st.subheader("Broker truth and local structure registry")
-    if not positions:
-        st.info("No broker positions are visible yet.")
-    else:
-        st.dataframe([
-            {
-                "Symbol": row.get("symbol"), "Qty": row.get("qty"),
-                "Market value": row.get("market_value"),
-                "Unrealized P&L": row.get("unrealized_pl"),
-            }
-            for row in positions
-        ], width="stretch", hide_index=True)
-    if book is not None:
-        st.markdown(f"**Local open structures:** {len(book.open_entries)}")
-        if book.entries:
-            st.dataframe([
-                {
-                    "ID": row.id, "Structure": row.structure,
-                    "Qty": row.qty, "Entry": row.entry,
-                    "Max loss": row.max_loss * 100 * row.qty,
-                    "Opened": row.opened_at, "Closed": row.closed_at,
-                    "Reason": row.close_reason,
-                }
-                for row in reversed(book.entries)
-            ], width="stretch", hide_index=True)
-            st.metric("Registry realized P&L", f"${book.realised_pnl():+,.2f}")
+    with st.expander("Technical safeguards"):
+        st.markdown(
+            """
+- The MCP client is read-only unless both order interlocks are enabled.
+- Stable client order IDs recover lost replies without duplicate exposure.
+- Reconciliation disagreement blocks entry but never blocks exit.
+- Model/data failure removes trades; it cannot remove the deadline.
+- Every evidence row links to the previous SHA-256 hash.
+            """
+        )
 
-with tabs[4]:
-    st.subheader("Reusable engine and sponsor-native lifecycle")
-    st.code(
-        """launchd (60s, non-overlapping)
-  → Alpaca MCP account + clock + news + stock snapshot
-  → Alpaca MCP option chain + historical evidence
-  → Featherless typed quorum / event-integrity veto
-  → deterministic surface gates + exact max-loss sizing
-  → Alpaca MCP idempotent multi-leg order + reconciliation
-  → Alpaca MCP activities + portfolio history
-  → hash-chained evidence ledger + this read-only dashboard""",
-        language="text",
-    )
-    st.markdown(
-        """
-The installed Alpaca MCP server exposes 72 tools. Raw movers are not treated as
-a universe because observed results contained penny stocks, warrants, and names
-without usable options. Historical bar pagination is chunked and deduplicated;
-paper fills are described honestly because paper trading does not model queue
-position, market impact, latency slippage, or displayed-size constraints.
-
-Featherless requests run concurrently under a true killable wall-clock deadline.
-Outputs must match an exact schema, cite supplied fact IDs, and stay inside the
-eligible ticker universe. Narrow non-expansive repairs—such as deleting a causal
-self-link—are recorded. No valid quorum means no entry.
-
-The stable client order ID is written before submission. A lost response is
-recovered by that ID; an unknown state blocks later actions. The registry groups
-broker legs into the structure across restarts. Reconciliation disagreements
-block entry but never block the evidence-matched exit.
-        """
-    )
-    st.caption(
-        "Engine v0.4 · current deployment window Mon Aug 31 09:30 ET to "
-        "Fri Sep 4 09:30 ET · all normal decisions autonomous"
-    )
+st.caption(
+    "Engine v0.4 · general event-convexity machinery, current AVGO deployment · "
+    "research software, not investment advice"
+)
