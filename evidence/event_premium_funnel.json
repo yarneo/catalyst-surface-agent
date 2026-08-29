@@ -1,0 +1,215 @@
+{
+ "back_expiry": "2026-09-11",
+ "candidates": [
+  {
+   "confidence": 1.0,
+   "datetime_quorum": true,
+   "event_type": "earnings",
+   "implied_event_move": 0.1441,
+   "replay": {
+    "adverse_mean": 0.146,
+    "adverse_median": -0.097,
+    "disposition": "SHADOW ONLY",
+    "mean": 0.381,
+    "median": 0.096,
+    "n": 8,
+    "reason": "Positive on average, but the adverse median is negative and its closed-market spread exceeded the frozen gate. Allocating would dilute stronger evidence.",
+    "wins": 0.62
+   },
+   "term_ratio": 1.3629,
+   "ticker": "SNOW"
+  },
+  {
+   "confidence": 1.0,
+   "datetime_quorum": false,
+   "event_type": "earnings",
+   "implied_event_move": 0.1298,
+   "replay": {
+    "adverse_mean": -0.231,
+    "adverse_median": -0.2,
+    "disposition": "EXCLUDED",
+    "mean": -0.095,
+    "median": 0.0,
+    "n": 7,
+    "reason": "Negative expectancy, sub-coin-flip win rate, and the classifier could not establish a datetime quorum.",
+    "wins": 0.43
+   },
+   "term_ratio": 1.3331,
+   "ticker": "HPE"
+  },
+  {
+   "confidence": 1.0,
+   "datetime_quorum": true,
+   "event_type": "earnings",
+   "implied_event_move": 0.1089,
+   "replay": {
+    "adverse_mean": 0.042,
+    "adverse_median": 0.069,
+    "disposition": "EXCLUDED",
+    "mean": 0.191,
+    "median": 0.149,
+    "n": 8,
+    "reason": "Operational: the Thursday after-close release resolves at the exact Friday 09:30 scoring boundary, leaving no reliable liquid exit before measurement.",
+    "wins": 0.62
+   },
+   "term_ratio": 1.3317,
+   "ticker": "LULU"
+  },
+  {
+   "confidence": 1.0,
+   "datetime_quorum": true,
+   "event_type": "earnings",
+   "implied_event_move": 0.0896,
+   "replay": {
+    "adverse_mean": 0.196,
+    "adverse_median": 0.177,
+    "disposition": "ORDER-ENABLED",
+    "mean": 0.47,
+    "median": 0.457,
+    "n": 8,
+    "reason": "Strongest and most robust: positive on both the last-trade proxy and the adverse envelope, in mean and median.",
+    "wins": 0.62
+   },
+   "term_ratio": 1.316,
+   "ticker": "AVGO"
+  },
+  {
+   "confidence": 1.0,
+   "datetime_quorum": true,
+   "event_type": "earnings",
+   "implied_event_move": 0.1197,
+   "replay": {
+    "adverse_mean": 0.05,
+    "adverse_median": -0.229,
+    "disposition": "EXCLUDED",
+    "mean": 0.215,
+    "median": -0.106,
+    "n": 8,
+    "reason": "Negative median on both the proxy and the adverse envelope; a positive mean carried by the tail.",
+    "wins": 0.5
+   },
+   "term_ratio": 1.2782,
+   "ticker": "DELL"
+  },
+  {
+   "confidence": 1.0,
+   "datetime_quorum": true,
+   "event_type": "earnings",
+   "implied_event_move": 0.0953,
+   "replay": {
+    "adverse_mean": -0.44,
+    "adverse_median": -0.426,
+    "disposition": "EXCLUDED",
+    "mean": -0.329,
+    "median": -0.402,
+    "n": 8,
+    "reason": "Worst long-vol history in the set. Its short-fly proxy was favourable but the four-leg adverse envelope averaged -25.5% on a 15.3% combined spread.",
+    "wins": 0.25
+   },
+   "term_ratio": 1.2455,
+   "ticker": "PANW"
+  },
+  {
+   "confidence": 0.9,
+   "datetime_quorum": true,
+   "event_type": "investor_day",
+   "implied_event_move": 0.0519,
+   "replay": null,
+   "term_ratio": 1.1539,
+   "ticker": "CRWD"
+  },
+  {
+   "confidence": null,
+   "datetime_quorum": null,
+   "event_type": "unclassified",
+   "implied_event_move": 0.0341,
+   "replay": null,
+   "term_ratio": 1.1226,
+   "ticker": "CRM"
+  },
+  {
+   "confidence": 0.2,
+   "datetime_quorum": false,
+   "event_type": "unclear",
+   "implied_event_move": 0.0482,
+   "replay": null,
+   "term_ratio": 1.1066,
+   "ticker": "MRVL"
+  }
+ ],
+ "classified_at": "2026-08-29T14:30:39.249519-04:00",
+ "front_expiry": "2026-09-04",
+ "generated_at": "2026-08-29T19:52:12.592011+00:00",
+ "limitations": [
+  "Closed-market observations are stale and cannot authorize entry.",
+  "A term bump does not prove the event identity or timestamp.",
+  "A cross-sectional residual is not validated expected P&L.",
+  "No candidate in this artifact has order authority.",
+  "Replay rows are quoted from the postmortem, not recomputed here.",
+  "This artifact records a selection process. It is not a backtest of the selected trade."
+ ],
+ "market_open_during_scan": false,
+ "mode": "SHADOW_RESEARCH_ONLY",
+ "order_enabled": false,
+ "replay_source": "research/strategy-evidence/POSTMORTEM_AND_HYPOTHESES.md",
+ "scan_generated_at": "2026-08-29T13:58:55.736774-04:00",
+ "skip_reasons": [
+  {
+   "count": 30,
+   "reason": "too few usable strike pairs near spot"
+  },
+  {
+   "count": 3,
+   "reason": "no term-structure jump"
+  }
+ ],
+ "stages": [
+  {
+   "count": 64,
+   "note": "Stable liquid anchors, fixed before the scan so the universe cannot be chosen after seeing the answer.",
+   "stage": "universe"
+  },
+  {
+   "count": 31,
+   "note": "A parity-corrected front/back surface could be built. 33 names could not be measured.",
+   "stage": "measurable"
+  },
+  {
+   "count": 9,
+   "names": [
+    "AVGO",
+    "CRM",
+    "CRWD",
+    "DELL",
+    "HPE",
+    "LULU",
+    "MRVL",
+    "PANW",
+    "SNOW"
+   ],
+   "note": "Front/back ATM term ratio implied a shared jump.",
+   "stage": "event-like"
+  },
+  {
+   "count": 6,
+   "names": [
+    "AVGO",
+    "DELL",
+    "HPE",
+    "LULU",
+    "PANW",
+    "SNOW"
+   ],
+   "note": "A grounded Featherless committee confirmed a scheduled earnings event with a datetime quorum.",
+   "stage": "event confirmed"
+  },
+  {
+   "count": 1,
+   "names": [
+    "AVGO"
+   ],
+   "note": "Survived the direct historical option replay and the execution-envelope and exit-timing gates.",
+   "stage": "order-enabled"
+  }
+ ]
+}

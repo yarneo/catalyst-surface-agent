@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import sys
 from pathlib import Path
@@ -145,6 +146,15 @@ def _display_safe(value, *, key=""):
     if isinstance(value, list):
         return [_display_safe(item) for item in value]
     return value
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _funnel() -> dict | None:
+    """The selection funnel, distilled from the committed shadow artifacts."""
+    path = ROOT / "evidence" / "event_premium_funnel.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
 
 
 def _book():
@@ -373,6 +383,59 @@ with tabs[0]:
         )
 
 with tabs[1]:
+    funnel = _funnel()
+    if funnel:
+        st.subheader("One trade is what survived, not what we looked at")
+        st.write(
+            "Every cycle the engine scans a fixed liquid universe for option "
+            "term structure implying a scheduled jump, confirms the event "
+            "against grounded sources, and replays the candidate's own option "
+            "history. This week exactly one name cleared every stage."
+        )
+        stages = funnel["stages"]
+        columns = st.columns(len(stages))
+        for column, stage in zip(columns, stages):
+            column.metric(stage["stage"].title(), stage["count"])
+            names = stage.get("names")
+            if names:
+                column.caption(", ".join(names))
+        st.caption(
+            f"Scanned {funnel['scan_generated_at'][:10]} against the "
+            f"{funnel['front_expiry']} / {funnel['back_expiry']} expiries. "
+            "Shadow research only: no artifact behind this funnel carries "
+            "order authority."
+        )
+
+        with st.expander("Every candidate, and why it did not get the trade"):
+            st.dataframe([{
+                "Ticker": row["ticker"],
+                "Term ratio": f"{row['term_ratio']:.2f}",
+                "Implied move": f"{row['implied_event_move']:.1%}",
+                "Event": row["event_type"],
+                "Dated": "yes" if row.get("datetime_quorum") else "no",
+                "Straddle mean": (f"{row['replay']['mean']:+.1%}"
+                                  if row.get("replay") else "not replayed"),
+                "Adverse median": (f"{row['replay']['adverse_median']:+.1%}"
+                                   if row.get("replay") else "—"),
+                "Outcome": (row["replay"]["disposition"]
+                            if row.get("replay") else "NOT CONFIRMED"),
+            } for row in funnel["candidates"]], hide_index=True, **STRETCH)
+            for row in funnel["candidates"]:
+                if row.get("replay"):
+                    st.markdown(f"**{row['ticker']} — "
+                                f"{row['replay']['disposition']}.** "
+                                f"{row['replay']['reason']}")
+            st.caption(f"Replay rows quoted from `{funnel['replay_source']}`. "
+                       "Regenerate this funnel with "
+                       "`python scripts/build_event_premium_funnel.py`.")
+
+        with st.expander("Why 33 of 64 names could not be measured"):
+            st.dataframe(funnel["skip_reasons"], hide_index=True, **STRETCH)
+            st.caption(
+                "A name is skipped when its surface cannot support an "
+                "auditable measurement, never because the answer was unwanted."
+            )
+
     st.subheader("Why AVGO survived the research")
     st.write(
         "We are not predicting whether earnings are good or bad. We are buying "

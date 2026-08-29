@@ -58,6 +58,42 @@ The published, credential-free hash chain at
 The dashboard makes the failed models, rejected strategies, MCP lifecycle, and
 autonomous evidence chain visible instead of presenting only the final trade.
 
+## One trade is what survived, not what we looked at
+
+The engine is a scanner, not a single bet. Against a fixed liquid universe it
+looks for option term structure implying a scheduled jump, confirms the event
+against grounded sources, and replays each candidate's own option history.
+Exactly one name cleared every stage:
+
+| Stage | Count | Survivors |
+|---|---:|---|
+| Universe, fixed before the scan | 64 | — |
+| Measurable parity-corrected surface | 31 | — |
+| Term structure implies a shared jump | 9 | AVGO CRM CRWD DELL HPE LULU MRVL PANW SNOW |
+| Grounded committee confirms a dated earnings event | 6 | AVGO DELL HPE LULU PANW SNOW |
+| Survives its own option replay and the execution gates | **1** | **AVGO** |
+
+The rejections are the argument. SNOW stays shadow-only: positive on average,
+but its adverse median is negative and its closed-market spread exceeded the
+frozen gate. LULU is excluded operationally — its Thursday after-close release
+resolves at the exact Friday 09:30 scoring boundary, leaving no reliable liquid
+exit. PANW had the most attractive short-fly proxy in the set and the worst
+four-leg adverse envelope, at -25.5% on a 15.3% combined spread.
+
+Rebuild the funnel from the committed shadow artifacts, with no credentials:
+
+```bash
+python scripts/build_event_premium_funnel.py
+```
+
+The cross-sectional rich/cheap model that produced these candidates was itself
+falsified before activation and is recorded as such: its residual mostly
+distinguishes event names from non-event names rather than mispriced events,
+and it labelled AVGO a sell against a directly opposite option history. The
+scanner survives as audited discovery; the ranking has no order authority.
+`scan_event_premium_book.py` and `classify_event_premium_candidates.py` contain
+no order flag and construct no order.
+
 ## Frozen policy
 
 1. Observe the predeclared Broadcom earnings event.

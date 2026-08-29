@@ -1,0 +1,360 @@
+{
+  "accepted": {
+    "AVGO": {
+      "confidence": 1.0,
+      "datetime_quorum": true,
+      "event_type": "earnings",
+      "factual_summary": "Broadcom is scheduled to announce Q3 FY2026 financial results after the market close on 2026-09-02, followed by a conference call at 17:00 ET.",
+      "invalidation": "A supplied fact explicitly states that the earnings release and conference call have been canceled or rescheduled.",
+      "order_enabled": false,
+      "scheduled_datetime": "2026-09-02T21:00:00Z",
+      "source_fact_ids": [
+        "official:avgo-q3-fy2026"
+      ],
+      "status": "upcoming",
+      "ticker": "AVGO"
+    },
+    "CRWD": {
+      "confidence": 0.9,
+      "datetime_quorum": true,
+      "event_type": "investor_day",
+      "factual_summary": "CrowdStrike schedules an investor briefing during Fal.Con for 2026-09-02 at 11:30 PDT (14:30 ET).",
+      "invalidation": "The investor briefing is canceled or rescheduled.",
+      "order_enabled": false,
+      "scheduled_datetime": "2026-09-02T18:30:00Z",
+      "source_fact_ids": [
+        "official:crwd-investor-briefing"
+      ],
+      "status": "upcoming",
+      "ticker": "CRWD"
+    },
+    "DELL": {
+      "confidence": 1.0,
+      "datetime_quorum": true,
+      "event_type": "earnings",
+      "factual_summary": "Dell Technologies fiscal 2027 second-quarter results webcast scheduled for 2026-09-01 at 16:30 CDT (17:30 EDT).",
+      "invalidation": "A supplied fact explicitly states a different event or no event occurs.",
+      "order_enabled": false,
+      "scheduled_datetime": "2026-09-01T20:30:00Z",
+      "source_fact_ids": [
+        "official:dell-q2-fy2027",
+        "surface:DELL"
+      ],
+      "status": "upcoming",
+      "ticker": "DELL"
+    },
+    "HPE": {
+      "confidence": 1.0,
+      "datetime_quorum": false,
+      "event_type": "earnings",
+      "factual_summary": "HPE fiscal 2026 third-quarter earnings conference call scheduled for 2026-09-02.",
+      "invalidation": "A supplied fact explicitly states a different event or no event occurs.",
+      "order_enabled": false,
+      "scheduled_datetime": null,
+      "source_fact_ids": [
+        "official:hpe-q3-fy2026",
+        "surface:HPE"
+      ],
+      "status": "upcoming",
+      "ticker": "HPE"
+    },
+    "LULU": {
+      "confidence": 1.0,
+      "datetime_quorum": true,
+      "event_type": "earnings",
+      "factual_summary": "Lululemon Athletica is scheduled to announce its fiscal 2026 second-quarter results and hold a conference call at 16:30 ET on 2026-09-03.",
+      "invalidation": "A supplied fact explicitly states that the earnings release and conference call have been canceled or rescheduled.",
+      "order_enabled": false,
+      "scheduled_datetime": "2026-09-03T20:30:00Z",
+      "source_fact_ids": [
+        "official:lulu-q2-fy2026"
+      ],
+      "status": "upcoming",
+      "ticker": "LULU"
+    },
+    "MRVL": {
+      "confidence": 0.2,
+      "datetime_quorum": false,
+      "event_type": "unclear",
+      "factual_summary": "Option surface contains a front-expiry term bump, but no specific event is identified.",
+      "invalidation": "A supplied fact explicitly identifies and schedules the event.",
+      "order_enabled": false,
+      "scheduled_datetime": null,
+      "source_fact_ids": [
+        "surface:MRVL"
+      ],
+      "status": "unclear",
+      "ticker": "MRVL"
+    },
+    "PANW": {
+      "confidence": 1.0,
+      "datetime_quorum": true,
+      "event_type": "earnings",
+      "factual_summary": "Palo Alto Networks to announce fiscal 2026 results after market close on 2026-09-01 with a webcast at 16:30 ET.",
+      "invalidation": "A supplied fact explicitly states a different event or no event occurs.",
+      "order_enabled": false,
+      "scheduled_datetime": "2026-09-01T20:30:00Z",
+      "source_fact_ids": [
+        "official:panw-fy2026",
+        "surface:PANW"
+      ],
+      "status": "upcoming",
+      "ticker": "PANW"
+    },
+    "SNOW": {
+      "confidence": 1.0,
+      "datetime_quorum": true,
+      "event_type": "earnings",
+      "factual_summary": "Snowflake is scheduled to announce fiscal 2027 second-quarter results after the U.S. market close on 2026-09-02, followed by a conference call at 17:00 ET.",
+      "invalidation": "A supplied fact explicitly states that the earnings release and conference call have been canceled or rescheduled.",
+      "order_enabled": false,
+      "scheduled_datetime": "2026-09-02T21:00:00Z",
+      "source_fact_ids": [
+        "official:snow-q2-fy2027"
+      ],
+      "status": "upcoming",
+      "ticker": "SNOW"
+    }
+  },
+  "attempts": [
+    {
+      "batch": [
+        "AVGO",
+        "LULU",
+        "SNOW"
+      ],
+      "elapsed_s": 7.477962499950081,
+      "error": null,
+      "model": "Qwen/Qwen2.5-14B-Instruct",
+      "usage": {
+        "cached_tokens": 0,
+        "completion_tokens": 516,
+        "prompt_tokens": 2529,
+        "total_tokens": 3045
+      },
+      "valid": true
+    },
+    {
+      "batch": [
+        "AVGO",
+        "LULU",
+        "SNOW"
+      ],
+      "elapsed_s": 9.366925540845841,
+      "error": null,
+      "model": "Qwen/Qwen2.5-32B-Instruct",
+      "usage": {
+        "cached_tokens": 0,
+        "completion_tokens": 477,
+        "prompt_tokens": 2529,
+        "total_tokens": 3006
+      },
+      "valid": true
+    },
+    {
+      "batch": [
+        "AVGO",
+        "LULU",
+        "SNOW"
+      ],
+      "elapsed_s": 16.567528916988522,
+      "error": "response contained no choices",
+      "model": "NousResearch/Hermes-4-14B",
+      "usage": {},
+      "valid": false
+    },
+    {
+      "batch": [
+        "DELL",
+        "HPE",
+        "PANW"
+      ],
+      "elapsed_s": 8.507366749923676,
+      "error": null,
+      "model": "Qwen/Qwen2.5-14B-Instruct",
+      "usage": {
+        "cached_tokens": 0,
+        "completion_tokens": 484,
+        "prompt_tokens": 2495,
+        "total_tokens": 2979
+      },
+      "valid": true
+    },
+    {
+      "batch": [
+        "DELL",
+        "HPE",
+        "PANW"
+      ],
+      "elapsed_s": 10.423095958773047,
+      "error": null,
+      "model": "Qwen/Qwen2.5-32B-Instruct",
+      "usage": {
+        "cached_tokens": 0,
+        "completion_tokens": 421,
+        "prompt_tokens": 2495,
+        "total_tokens": 2916
+      },
+      "valid": true
+    },
+    {
+      "batch": [
+        "DELL",
+        "HPE",
+        "PANW"
+      ],
+      "elapsed_s": 16.57360791694373,
+      "error": "response contained no choices",
+      "model": "NousResearch/Hermes-4-14B",
+      "usage": {},
+      "valid": false
+    },
+    {
+      "batch": [
+        "CRM",
+        "CRWD",
+        "MRVL"
+      ],
+      "elapsed_s": 35.0,
+      "error": "hard timeout after 35.0s",
+      "model": "Qwen/Qwen2.5-14B-Instruct",
+      "usage": {},
+      "valid": false
+    },
+    {
+      "batch": [
+        "CRM",
+        "CRWD",
+        "MRVL"
+      ],
+      "elapsed_s": 8.325470375362784,
+      "error": null,
+      "model": "Qwen/Qwen2.5-32B-Instruct",
+      "usage": {
+        "cached_tokens": 0,
+        "completion_tokens": 406,
+        "prompt_tokens": 2715,
+        "total_tokens": 3121
+      },
+      "valid": true
+    },
+    {
+      "batch": [
+        "CRM",
+        "CRWD",
+        "MRVL"
+      ],
+      "elapsed_s": 16.855495042167604,
+      "error": null,
+      "model": "NousResearch/Hermes-4-14B",
+      "usage": {
+        "cached_tokens": 0,
+        "completion_tokens": 528,
+        "prompt_tokens": 2715,
+        "total_tokens": 3243
+      },
+      "valid": true
+    }
+  ],
+  "authority": {
+    "missing_datetime_quorum": "not schedulable",
+    "missing_quorum": "fail closed",
+    "semantic_batch_size": 3,
+    "semantic_output_can_create_trade": false,
+    "semantic_output_can_increase_size": false
+  },
+  "candidates": [
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.144142550191741,
+      "term_ratio": 1.3629464147541124,
+      "ticker": "SNOW"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.10887753769803457,
+      "term_ratio": 1.3317222858979294,
+      "ticker": "LULU"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.08955281563525797,
+      "term_ratio": 1.3159938960565267,
+      "ticker": "AVGO"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.12976641711128514,
+      "term_ratio": 1.3331183433308778,
+      "ticker": "HPE"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.11974748897793891,
+      "term_ratio": 1.278209068503852,
+      "ticker": "DELL"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.09528086067112003,
+      "term_ratio": 1.245514876528423,
+      "ticker": "PANW"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.04824305863345599,
+      "term_ratio": 1.106612541787644,
+      "ticker": "MRVL"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.05191568880734647,
+      "term_ratio": 1.1538939160054718,
+      "ticker": "CRWD"
+    },
+    {
+      "back_expiry": "2026-09-11",
+      "front_expiry": "2026-09-04",
+      "implied_event_move": 0.0340840754175107,
+      "term_ratio": 1.1226241120546876,
+      "ticker": "CRM"
+    }
+  ],
+  "generated_at": "2026-08-29T14:30:39.249519-04:00",
+  "mode": "SHADOW_RESEARCH_ONLY",
+  "order_enabled": false,
+  "reasons": [
+    "SNOW: 2/2 agree earnings/upcoming; datetime_quorum=True",
+    "LULU: 2/2 agree earnings/upcoming; datetime_quorum=True",
+    "AVGO: 2/2 agree earnings/upcoming; datetime_quorum=True",
+    "HPE: 2/2 agree earnings/upcoming; datetime_quorum=False",
+    "DELL: 2/2 agree earnings/upcoming; datetime_quorum=True",
+    "PANW: 2/2 agree earnings/upcoming; datetime_quorum=True",
+    "MRVL: 2/2 agree unclear/unclear; datetime_quorum=False",
+    "CRWD: 2/2 agree investor_day/upcoming; datetime_quorum=True",
+    "CRM: no event/status quorum {('product_launch', 'upcoming'): 1, ('investor_day', 'upcoming'): 1}"
+  ],
+  "source": {
+    "market_open": false,
+    "mcp_tools_available": 72,
+    "mcp_tools_used": [
+      "tools/list",
+      "get_clock",
+      "get_account_info",
+      "get_news"
+    ],
+    "news_payload_sha256": "c7fbbbf43127d08e720194ab638f7dddc01a6ec2a7d3a85ef6eabb3f077f787b",
+    "transport": [
+      "Alpaca MCP",
+      "Featherless"
+    ]
+  }
+}
