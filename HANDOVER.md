@@ -5,10 +5,10 @@ Start here when continuing this repository for Yar and Starboi. Read this file,
 
 ## Current objective
 
-Maintain a fully autonomous, auditable paper-trading agent for a fixed measured
-window. The strategy is locked: one conditional AVGO near-ATM long straddle
-around the configured earnings event. All broad directional-news, macro, and
-peer-spillover order paths are disabled on current evidence.
+Maintain a reusable, fully autonomous, auditable scheduled-event paper-trading
+engine. Its current deployment is locked: one conditional AVGO near-ATM long
+straddle around the configured earnings event. Broad directional-news, macro,
+and peer-spillover order paths are disabled on current evidence.
 
 The priority order is:
 
@@ -89,6 +89,13 @@ it must never become an order surface.
   capacity errors, and nominal HTTP timeouts exceeding wall-clock budgets. The
   production router uses killable workers, exact schemas, grounding, narrow
   audited repairs, and no-quorum/no-entry behavior.
+- The activation rehearsal passed 8/8 named groups. A real closed-market MCP
+  surface captured 29 paired strikes and positive fitted smile curvature; it is
+  stale, diagnostic-only, and changed no gate.
+- The latest visible Featherless trace preserves both a 0/3 fail-closed result
+  and a later 2/3 valid recovery. The third model hit the true 35-second bound.
+- The 09:45 exit and explicit 15:30 emergency-flat state both pass, including
+  when reconciliation disagrees. The managed exit remains retriable.
 
 Detailed methods and event rows live in `research/strategy-evidence/`.
 
@@ -122,11 +129,11 @@ options level. The repository intentionally contains no real account metadata.
 
 ## Remaining integration work
 
-- Bind and verify the dedicated replacement paper account outside Git.
-- Run a full replacement-account shadow rehearsal and failure drills.
-- Validate one-minute supervision and heartbeat visibility in the target host.
+- Keep the dedicated paper account and host-specific supervisor configuration
+  outside Git; repeat identity/flatness verification immediately before arming.
 - Capture measured-window account, activity, position, portfolio-history, model,
   and decision-ledger snapshots for the final results narrative.
+- Keep the existing gate frozen unless genuinely new evidence falsifies it.
 
 Do not resurrect a rejected strategy merely to increase trade count. A no-trade
 decision is correct when the frozen event, model, surface, account, or clock gate

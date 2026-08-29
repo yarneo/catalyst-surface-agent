@@ -103,6 +103,30 @@ def _audit_rows():
     return AuditLedger(ROOT / "data" / "event_evidence.jsonl").read()
 
 
+def _preflight_rows():
+    live_path = ROOT / "data" / "preflight_evidence.jsonl"
+    published_path = ROOT / "evidence" / "preflight_evidence.jsonl"
+    return AuditLedger(live_path if live_path.exists() else published_path).read()
+
+
+def _latest(rows, event_type):
+    return next((row for row in reversed(rows)
+                 if row.event_type == event_type), None)
+
+
+def _display_safe(value, *, key=""):
+    """Keep dashboard inspection useful without exposing account identifiers."""
+    blocked = ("secret", "password", "api_key", "authorization",
+               "credential", "account_number", "access_token")
+    if any(part in key.lower() for part in blocked):
+        return "<redacted>"
+    if isinstance(value, dict):
+        return {str(k): _display_safe(v, key=str(k)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_display_safe(item) for item in value]
+    return value
+
+
 def _book():
     return Book(ROOT / "data" / "event_book.json")
 
@@ -117,7 +141,7 @@ def _remaining(value: dt.timedelta) -> str:
 
 now = now_et()
 st.sidebar.title("Catalyst Surface Agent")
-st.sidebar.caption("Yar + Starboi · autonomous paper-trading research")
+st.sidebar.caption("Yar + Starboi · autonomous research deployment")
 st.sidebar.metric("Measured window", _remaining(DEADLINE - now),
                   "remaining" if now < DEADLINE else "complete",
                   delta_color="off")
@@ -128,16 +152,29 @@ st.sidebar.markdown(
     f"**Exit:** {POLICY.exit_at:%a %b %d, %H:%M} ET  \n"
     f"**Cutoff:** {DEADLINE:%a %b %d, %H:%M} ET"
 )
-if st.sidebar.button("Refresh", use_container_width=True):
+if st.sidebar.button("Refresh", width="stretch"):
     st.cache_data.clear()
     st.rerun()
 
-st.title("Semantic event convexity, with every decision auditable")
+st.title("A general event-convexity engine, currently deployed on AVGO")
 st.caption(
-    "A fully autonomous, direction-neutral AVGO earnings strategy. Featherless "
-    "can veto stale event uncertainty and explain the release; deterministic "
-    "Alpaca MCP data owns surface, risk, orders, reconciliation, and P&L."
+    "The reusable engine discovers and interprets scheduled catalysts, measures "
+    "option surfaces, applies frozen risk policy, executes, reconciles, and exits. "
+    "The current measured deployment is one conditional, direction-neutral AVGO "
+    "earnings straddle—not the boundary of what the engine can run."
 )
+
+engine_col, deployment_col = st.columns(2)
+with engine_col:
+    st.info(
+        "**General engine**  \nScheduled-event facts → semantic surprise vector "
+        "→ surface diagnostics → deterministic gates → managed lifecycle"
+    )
+with deployment_col:
+    st.success(
+        "**Current deployment**  \nAVGO Q3 FY2026 · Sep 4 ATM straddle · one "
+        "conditional entry · exact max loss · predeclared exit"
+    )
 
 try:
     account_payload = _account()
@@ -153,6 +190,13 @@ except AuditCorrupt as exc:
     st.error(f"Evidence chain failed verification: {exc}")
 
 try:
+    preflight = _preflight_rows()
+    preflight_ok = True
+except AuditCorrupt as exc:
+    preflight, preflight_ok = [], False
+    st.error(f"Preflight evidence chain failed verification: {exc}")
+
+try:
     book = _book()
 except BookCorrupt as exc:
     book = None
@@ -164,7 +208,7 @@ if account_payload:
     equity = float(account_payload["account"]["equity"])
     positions = account_payload["positions"]
 
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Equity", f"${equity:,.2f}" if equity is not None else "Awaiting account",
           f"${equity - 100_000:+,.2f}" if equity is not None else None)
 c2.metric("Measured P&L",
@@ -173,12 +217,14 @@ c3.metric("Open broker legs", len(positions))
 c4.metric("Max-loss ceiling", "25%", "$25,000 at start", delta_color="off")
 c5.metric("Evidence chain", "verified" if audit_ok else "failed",
           f"{len(audit)} rows", delta_color="off")
+c6.metric("Preflight", "verified" if preflight_ok else "failed",
+          f"{len(preflight)} rows", delta_color="off")
 
-tabs = st.tabs(["Strategy", "Research ledger", "Autonomous evidence",
+tabs = st.tabs(["Current deployment", "Rejected strategies", "Agent trace",
                 "Positions & P&L", "Technical method"])
 
 with tabs[0]:
-    st.subheader("Final policy")
+    st.subheader("Frozen current-deployment policy")
     left, right = st.columns([1.35, 1])
     with left:
         st.markdown(
@@ -220,7 +266,7 @@ with tabs[0]:
     fig.add_hline(y=0, line_color="#888")
     fig.update_layout(height=400, yaxis_title="premium return (%)",
                       margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption(
         "Actual Alpaca MCP historical option trade bars, not a historical NBBO "
         "fill backtest. The adverse envelope buys each leg at its highest entry-"
@@ -229,13 +275,13 @@ with tabs[0]:
 
 with tabs[1]:
     st.subheader("What failed—and how it changed the strategy")
-    st.dataframe(DECISIONS, use_container_width=True, hide_index=True)
+    st.dataframe(DECISIONS, width="stretch", hide_index=True)
     st.markdown(
         "The final policy is intentionally narrow because the direct-news, "
         "NFP-to-BTC, AVGO continuation, peer-spillover, and ISM variants did "
         "not survive their first timestamped falsification. The executable "
-        "research programs and event-level results remain under "
-        "`research/strategy-evidence/`; rejected ideas are not deleted from the story."
+        "research programs and event-level results remain in the repository; "
+        "rejected ideas are not deleted from the story."
     )
     st.warning(
         "Evidence classes stay separate: paper fills, stock/crypto event studies, "
@@ -244,9 +290,94 @@ with tabs[1]:
     )
 
 with tabs[2]:
-    st.subheader("Hash-chained runtime evidence")
+    st.subheader("One autonomous decision, from observation to evidence")
+
+    rehearsal = _latest(preflight, "rehearsal_summary")
+    surface_row = _latest(preflight, "surface_diagnostic")
+    semantic_rows = [row for row in preflight
+                     if row.event_type == "featherless_preflight"]
+    semantic_row = semantic_rows[-1] if semantic_rows else None
+
+    if rehearsal:
+        value = rehearsal.payload
+        st.success(
+            f"Rehearsal: {value.get('passed_count')}/{value.get('total_count')} "
+            f"drills passed · gate changed: {value.get('order_gate_changed')} · "
+            f"audit #{rehearsal.sequence} ({rehearsal.hash[:12]})"
+        )
+
+    st.markdown("#### Live AVGO surface diagnostic")
+    if surface_row:
+        diagnostic = surface_row.payload.get("diagnostic", {})
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("Paired strikes", diagnostic.get("point_count", "—"))
+        s2.metric("Fitted shape", diagnostic.get("shape", "—"))
+        curvature = diagnostic.get("quadratic_curvature_per_log_moneyness_pct2")
+        s3.metric("Curvature", f"{curvature:+.6f}" if curvature is not None else "—")
+        premium = diagnostic.get("executable_premium_to_spot")
+        s4.metric("Nearest premium / spot",
+                  f"{premium:.2%}" if premium is not None else "—")
+        points = diagnostic.get("points") or []
+        if points:
+            import plotly.graph_objects as go
+            smile = go.Figure(go.Scatter(
+                x=[point["strike"] for point in points],
+                y=[100 * point["mean_iv"] for point in points],
+                mode="lines+markers", name="paired call/put mean IV",
+                line=dict(color="#7dc4e4")))
+            smile.add_vline(x=diagnostic.get("spot"), line_dash="dash",
+                            annotation_text="spot")
+            smile.update_layout(
+                height=330, xaxis_title="strike", yaxis_title="implied volatility (%)",
+                margin=dict(l=10, r=10, t=20, b=10))
+            st.plotly_chart(smile, width="stretch")
+        fresh = bool(surface_row.payload.get("fresh_for_entry"))
+        st.warning(
+            f"Diagnostic only · fresh for entry: {fresh} · policy gate changed: "
+            f"{diagnostic.get('policy_gate_changed', False)}. The Saturday capture "
+            "is a dated Friday-close observation, not executable evidence."
+        )
+    else:
+        st.info("No audited multi-strike surface capture is available yet.")
+
+    st.markdown("#### Featherless surprise vector and failure trail")
+    if semantic_row:
+        vector = semantic_row.payload.get("surprise_vector") or {}
+        committee = semantic_row.payload.get("committee") or {}
+        f1, f2, f3, f4, f5 = st.columns(5)
+        f1.metric("Novelty", f"{vector.get('novelty', 0):.2f}")
+        f2.metric("Surprise", f"{vector.get('surprise', 0):.2f}")
+        f3.metric("Confidence", f"{vector.get('confidence', 0):.2f}")
+        f4.metric("Direction", vector.get("direction", "no quorum"))
+        f5.metric("Half-life", f"{vector.get('expected_half_life_minutes', 0)}m")
+        st.dataframe([{
+            "Audit": f"#{row.sequence}",
+            "Recorded": row.recorded_at,
+            "Outcome": row.payload.get("committee", {}).get("reason"),
+            "Integrity clear": row.payload.get("event_integrity", {}).get("clear"),
+            "Hash": row.hash[:12],
+        } for row in reversed(semantic_rows)], width="stretch", hide_index=True)
+        st.dataframe(committee.get("attempts") or [], width="stretch", hide_index=True)
+        authority = semantic_row.payload.get("authority") or {}
+        st.caption(
+            f"Authority: {authority.get('mode')} · can authorize this entry: "
+            f"{authority.get('entry_authorized_by_this_artifact')} · policy gate "
+            f"changed: {authority.get('policy_gate_changed')}"
+        )
+        lifecycle = semantic_row.payload.get("mcp_lifecycle") or {}
+        st.code(
+            f"Alpaca MCP: {lifecycle.get('tools_available', '—')} tools available\n"
+            f"Observed here: {' → '.join(lifecycle.get('tools_used') or [])}\n"
+            "Runtime: account → positions → clock/news/snapshot/chain → order → "
+            "reconciliation → activities/portfolio history",
+            language="text",
+        )
+    else:
+        st.info("No live semantic preflight is available yet.")
+
+    st.markdown("#### Hash-chained runtime evidence")
     if not audit:
-        st.info("No tournament cycles have been recorded yet.")
+        st.info("No measured-window cycles have been recorded yet.")
     else:
         latest = list(reversed(audit[-100:]))
         st.dataframe([
@@ -258,12 +389,12 @@ with tabs[2]:
                 "Previous": row.previous_hash[:12],
             }
             for row in latest
-        ], use_container_width=True, hide_index=True)
+        ], width="stretch", hide_index=True)
         selected = st.selectbox(
             "Inspect evidence row",
             options=latest,
             format_func=lambda row: f"#{row.sequence} · {row.event_type} · {row.recorded_at}")
-        st.json(selected.payload)
+        st.json(_display_safe(selected.payload))
     st.markdown(
         "Each row includes the previous row's SHA-256 digest. Editing, removing, "
         "or reordering a past decision breaks verification. Sensitive config "
@@ -282,7 +413,7 @@ with tabs[3]:
                 "Unrealized P&L": row.get("unrealized_pl"),
             }
             for row in positions
-        ], use_container_width=True, hide_index=True)
+        ], width="stretch", hide_index=True)
     if book is not None:
         st.markdown(f"**Local open structures:** {len(book.open_entries)}")
         if book.entries:
@@ -295,11 +426,11 @@ with tabs[3]:
                     "Reason": row.close_reason,
                 }
                 for row in reversed(book.entries)
-            ], use_container_width=True, hide_index=True)
+            ], width="stretch", hide_index=True)
             st.metric("Registry realized P&L", f"${book.realised_pnl():+,.2f}")
 
 with tabs[4]:
-    st.subheader("One sponsor-native autonomous loop")
+    st.subheader("Reusable engine and sponsor-native lifecycle")
     st.code(
         """launchd (60s, non-overlapping)
   → Alpaca MCP account + clock + news + stock snapshot
@@ -331,6 +462,6 @@ block entry but never block the evidence-matched exit.
         """
     )
     st.caption(
-        "Final strategy v0.4 · exact measured window Mon Aug 31 09:30 ET to "
+        "Engine v0.4 · current deployment window Mon Aug 31 09:30 ET to "
         "Fri Sep 4 09:30 ET · all normal decisions autonomous"
     )

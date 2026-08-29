@@ -390,13 +390,23 @@ def main() -> int:
             "action": action, "can_enter": can_enter,
             "open_entries": len(book.open_entries), "window_start": START,
             "deadline": DEADLINE,
+            "exit_deadline_state": (
+                "emergency_flat_by"
+                if action == "EXIT" and now >= POLICY.emergency_flat_by else
+                "scheduled_exit" if action == "EXIT" else None
+            ),
         }, recorded_at=now)
         log(f"action={action} equity=${equity:,.2f} open={len(book.open_entries)}")
 
         if action == "EXIT":
+            if args.flatten:
+                exit_reason = "manual flatten"
+            elif now >= POLICY.emergency_flat_by:
+                exit_reason = "emergency flat-by deadline"
+            else:
+                exit_reason = "frozen post-earnings 09:45 exit"
             code = _exit(mcp, book, ledger, now, enable_orders=args.enable_orders,
-                         reason="manual flatten" if args.flatten else
-                                "frozen post-earnings 09:45 exit")
+                         reason=exit_reason)
         elif action == "ENTER" and can_enter:
             try:
                 clock = mcp.market_clock()

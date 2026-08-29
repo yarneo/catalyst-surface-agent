@@ -252,6 +252,24 @@ no fees; and a current indicative paper surface may mark differently. The
 adverse envelope intentionally overstates timing cost but does not substitute
 for a true historical marketable-quote replay.
 
+## Audited activation rehearsal — 2026-08-29
+
+The reviewed, credential-free chain at `evidence/preflight_evidence.jsonl`
+preserves the activation result separately from future measured P&L:
+
+- 8/8 real-shadow and deterministic failure-drill groups passed;
+- 29 paired Sep 4 strikes were captured through Alpaca MCP with fitted ATM IV,
+  skew, smile curvature, quote timestamps, spread, and raw-payload digest;
+- the closed-market surface is explicitly stale and diagnostic-only, and its
+  5.408% combined width would not pass the frozen 5% order gate;
+- Featherless first failed closed 0/3 on two schema violations and one hard
+  timeout, then produced a separately audited 2/3 valid result after the output
+  contract was clarified; the third model was still killed at 35 seconds;
+- the one-minute lifecycle and both 09:45/15:30 exit states were verified, while
+  the order gate remained unchanged.
+
+These are reliability and product-evidence results, not evidence of future P&L.
+
 ## Remaining hypotheses before activation
 
 ### H1 — narrowly typed direct catalyst continuation
@@ -318,10 +336,10 @@ option evidence removes the apparent advantage.
 | Direct continuation ablation | News+tape versus tape-only on held-out events. | Broad keyword version rejected; typed version shadow-only. |
 | Spillover placebo | Causal peer versus beta/sector matched random peers. | Naive AVGO laggard version rejected. |
 | Option feasibility | Conservative executable spread and mark assumptions. | Eight-event MCP historical option-trade replay passed conditionally; current live marketable surface still gates entry. Historical NBBO fills remain unavailable. |
-| Featherless reliability | Valid-output, latency, disagreement, and failure rates by model. | Typed router passed 3/3 real probe in 14.51s; prolonged shadow statistics pending. |
-| Account isolation | New account exactly $100k, flat, paper, correct options level. | Waiting for replacement account |
-| Deadline drill | Evidence-matched 09:45 exit and emergency prior-session flatten. | Pure lifecycle boundaries and mismatch-does-not-block-exit runner behavior pass; replacement-account drill pending. |
-| Autonomous restart | No duplicate orders after process kill/restart. | Stable entry client ID, pre-order intent, recovery path, and tests implemented; broker-backed v2 drill pending. |
+| Featherless reliability | Valid-output, latency, disagreement, and failure rates by model. | Audited 0/3 fail-closed followed by 2/3 valid recovery; one model killed at 35s. Prolonged statistics remain pending. |
+| Account isolation | Dedicated account, flat, paper, correct options level. | Passed through the private read-only runner; identifiers remain outside Git. Repeat immediately before arming. |
+| Deadline drill | Evidence-matched 09:45 exit and 15:30 emergency flat-by. | Both production-path drills pass, including reconciliation mismatch and explicit emergency retry state. |
+| Autonomous restart | No duplicate orders after process kill/restart. | Stable client ID, intent-before-submit, recovery, partial-fill, and lost-response drills pass. No live broker order was created in preflight. |
 
 No pending row is evidence of an edge. It is a build/research obligation.
 

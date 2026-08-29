@@ -1,17 +1,18 @@
 # Catalyst Surface Agent
 
-An autonomous paper-trading research agent for a short, fixed measurement
-window. It combines typed language-model interpretation with deterministic
-market-data verification, exact options risk, idempotent execution, continuous
-broker reconciliation, and a tamper-evident result ledger.
+An autonomous scheduled-event convexity engine for paper-trading research. It
+combines typed language-model interpretation with deterministic market-data
+verification, exact options risk, idempotent execution, continuous broker
+reconciliation, and a tamper-evident result ledger.
 
 [Open the live dashboard](https://catalyst-surface-agent.streamlit.app/)
 
-The current strategy is deliberately narrow: conditionally buy a near-the-money
-AVGO earnings straddle when the executable option surface is cheaper than a
-frozen threshold, then exit at the same next-morning horizon used in research.
-All broader news-continuation, macro, and peer-spillover ideas remain disabled
-or shadow-only because their timestamped replays did not justify live orders.
+The engine is general; its current deployment is deliberately narrow:
+conditionally buy a near-the-money AVGO earnings straddle when the executable
+option surface passes a frozen threshold, then exit at the same next-morning
+horizon used in research. Broader news-continuation, macro, and peer-spillover
+ideas remain disabled or shadow-only because their timestamped replays did not
+justify orders.
 
 ## What makes it different
 
@@ -29,6 +30,22 @@ or shadow-only because their timestamped replays did not justify live orders.
 - **Autonomous but fail-closed.** Stale data, malformed model output, missing
   quorum, wrong account, unknown order state, or reconciliation mismatch cannot
   silently become a trade.
+
+## Audited preflight
+
+The published, credential-free hash chain at
+[`evidence/preflight_evidence.jsonl`](evidence/preflight_evidence.jsonl) records:
+
+- 8/8 end-to-end and named failure-drill groups passing;
+- a real read-only Alpaca MCP lifecycle against the isolated paper account;
+- 29 paired AVGO Sep 4 strikes, fitted smile curvature, timestamps, spread, and
+  premium/spot, explicitly marked stale and diagnostic-only;
+- a Featherless 0/3 fail-closed committee followed by a 2/3 valid recovery with
+  its novelty/surprise/confidence vector and per-model latency;
+- `policy_gate_changed=false` throughout.
+
+The dashboard makes the failed models, rejected strategies, MCP lifecycle, and
+autonomous evidence chain visible instead of presenting only the final trade.
 
 ## Frozen policy
 
@@ -88,6 +105,9 @@ hash-chained JSONL evidence + read-only dashboard
 Key modules:
 
 - `scripts/run_event_agent.py` — one autonomous cycle; shadow mode by default.
+- `scripts/capture_surface_diagnostic.py` — read-only multi-strike IV capture.
+- `scripts/capture_semantic_preflight.py` — live typed surprise-vector probe.
+- `scripts/run_event_rehearsal.py` — real shadow cycle plus named failure drills.
 - `src/trading_bot/tournament/scheduled.py` — frozen surface and lifecycle gates.
 - `src/trading_bot/tournament/featherless.py` — concurrent typed model router.
 - `src/trading_bot/tournament/integrity.py` — semantic veto boundary.
@@ -107,8 +127,9 @@ uv run pytest tests/ -q
 ```
 
 Fill `.env.local` with dedicated paper-account and Featherless credentials.
-Secret files, mutable books, ledgers, logs, caches, and Streamlit secrets are
-ignored by Git.
+Secret files, mutable books, runtime ledgers, logs, caches, and Streamlit secrets
+are ignored by Git. The tracked preflight chain is an explicitly reviewed,
+credential-free evidence export, not a mutable account ledger.
 
 Run one fully connected **shadow** cycle:
 

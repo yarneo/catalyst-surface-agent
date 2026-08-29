@@ -144,6 +144,30 @@ def test_exit_clock_still_runs_when_reconciliation_blocks_new_entries(
     assert any(row.event_type == "reconciliation_mismatch" for row in ledger.read())
 
 
+def test_emergency_flat_deadline_is_explicit_and_still_retries_exit(
+        runner, monkeypatch, tmp_path):
+    now = runner.POLICY.emergency_flat_by
+    book_path = tmp_path / "book.json"
+    legs = [
+        {"symbol": "AVGO260904C00365000", "side": "buy", "ratio_qty": 1},
+        {"symbol": "AVGO260904P00365000", "side": "buy", "ratio_qty": 1},
+    ]
+    Book(book_path).add(BookEntry(
+        id="avgo-1", underlying="AVGO", structure="long_straddle", legs=legs,
+        qty=1, entry=29.0, max_profit=58.0, max_loss=29.0,
+        opened_at="2026-09-02T15:30:00-04:00"))
+    called = []
+    monkeypatch.setattr(runner, "_exit",
+                        lambda *args, **kwargs: called.append(kwargs["reason"]) or 2)
+    positions = [{"symbol": leg["symbol"], "qty": "1"} for leg in legs]
+    rc, _, _, ledger = drive(
+        runner, monkeypatch, tmp_path, now, positions=positions)
+    cycle = next(row for row in ledger.read() if row.event_type == "cycle")
+    assert rc == 2
+    assert called == ["emergency flat-by deadline"]
+    assert cycle.payload["exit_deadline_state"] == "emergency_flat_by"
+
+
 def test_post_event_hold_records_featherless_semantics_without_changing_exit(
         runner, monkeypatch, tmp_path):
     now = dt.datetime(2026, 9, 2, 16, 30, tzinfo=ET)

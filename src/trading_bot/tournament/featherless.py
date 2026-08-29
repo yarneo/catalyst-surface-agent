@@ -36,6 +36,8 @@ direction is bullish, bearish, mixed, or unknown. Primary tickers must be named
 in FACTS. Secondary tickers may only come from ELIGIBLE_TICKERS. Every claim and
 causal link must cite supplied fact_id values. A causal link has exactly:
 source_ticker, target_ticker, direction, mechanism, confidence, source_fact_ids.
+Every secondary ticker MUST be the target of a cited causal link; when no such
+link is supported, return an empty secondary_tickers array.
 causal_links, primary_tickers, secondary_tickers, and source_fact_ids MUST always
 be JSON arrays, including when empty. Never create a self-link. invalidation MUST
 be a non-empty observable condition. Do not use outside facts. If evidence is
