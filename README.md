@@ -33,6 +33,17 @@ justify orders.
 
 ## Audited preflight
 
+Check it yourself, with no credentials and no network:
+
+```bash
+python scripts/verify_evidence.py
+```
+
+It recomputes the whole hash chain from the file on disk, prints the terminal
+hash and every event type, and asserts the two claims the chain exists to
+support: that no unredacted credential field survives, and that no row changed
+a policy gate. It exits non-zero if any of that fails.
+
 The published, credential-free hash chain at
 [`evidence/preflight_evidence.jsonl`](evidence/preflight_evidence.jsonl) records:
 
@@ -125,6 +136,18 @@ uv sync
 cp .env.example .env.local
 uv run pytest tests/ -q
 ```
+
+Before publishing anything — the repository, an evidence export, or a
+recording — check that no credential is going out with it:
+
+```bash
+python scripts/check_no_secrets.py            # working tree + full git history
+python scripts/check_no_secrets.py --selftest # prove the rules still match
+```
+
+It reports `path:line rule` and never the matched text, so the output of a
+failing run is itself safe to paste. The rules are unit-tested, because a
+scanner that has quietly stopped matching is worse than none.
 
 Fill `.env.local` with dedicated paper-account and Featherless credentials.
 Secret files, mutable books, runtime ledgers, logs, caches, and Streamlit secrets
