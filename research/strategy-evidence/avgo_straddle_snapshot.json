@@ -1,0 +1,216 @@
+{
+ "event_dates": [
+  "2024-09-05",
+  "2024-12-12",
+  "2025-03-06",
+  "2025-06-05",
+  "2025-09-04",
+  "2025-12-11",
+  "2026-03-04",
+  "2026-06-03"
+ ],
+ "note": "Historical five-minute option and stock trade bars read through Alpaca MCP. Market observations only: no account, position or credential data.",
+ "observations": [
+  {
+   "call": "AVGO240906C00150000",
+   "date": "2024-09-05",
+   "put": "AVGO240906P00150000",
+   "spot": 150.25,
+   "strike": 150.0,
+   "windows": {
+    "AVGO240906C00150000": {
+     "entry_bad": 7.3,
+     "entry_last": 6.07,
+     "entry_trades": 96,
+     "exit_bad": 0.01,
+     "exit_last": 0.02,
+     "exit_trades": 77
+    },
+    "AVGO240906P00150000": {
+     "entry_bad": 3.55,
+     "entry_last": 3.25,
+     "entry_trades": 487,
+     "exit_bad": 10.15,
+     "exit_last": 12.11,
+     "exit_trades": 191
+    }
+   }
+  },
+  {
+   "call": "AVGO241213C00177500",
+   "date": "2024-12-12",
+   "put": "AVGO241213P00177500",
+   "spot": 178.2,
+   "strike": 177.5,
+   "windows": {
+    "AVGO241213C00177500": {
+     "entry_bad": 9.0,
+     "entry_last": 8.74,
+     "entry_trades": 75,
+     "exit_bad": 37.15,
+     "exit_last": 42.87,
+     "exit_trades": 38
+    },
+    "AVGO241213P00177500": {
+     "entry_bad": 5.6,
+     "entry_last": 4.8,
+     "entry_trades": 354,
+     "exit_bad": 0.01,
+     "exit_last": 0.01,
+     "exit_trades": 32
+    }
+   }
+  },
+  {
+   "call": "AVGO250307C00177500",
+   "date": "2025-03-06",
+   "put": "AVGO250307P00177500",
+   "spot": 177.14,
+   "strike": 177.5,
+   "windows": {
+    "AVGO250307C00177500": {
+     "entry_bad": 11.0,
+     "entry_last": 9.29,
+     "entry_trades": 140,
+     "exit_bad": 11.68,
+     "exit_last": 14.7,
+     "exit_trades": 15
+    },
+    "AVGO250307P00177500": {
+     "entry_bad": 7.35,
+     "entry_last": 7.2,
+     "entry_trades": 153,
+     "exit_bad": 0.12,
+     "exit_last": 0.17,
+     "exit_trades": 189
+    }
+   }
+  },
+  {
+   "call": "AVGO250606C00257500",
+   "date": "2025-06-05",
+   "put": "AVGO250606P00257500",
+   "spot": 257.57,
+   "strike": 257.5,
+   "windows": {
+    "AVGO250606C00257500": {
+     "entry_bad": 11.1,
+     "entry_last": 9.9,
+     "entry_trades": 57,
+     "exit_bad": 0.82,
+     "exit_last": 0.87,
+     "exit_trades": 333
+    },
+    "AVGO250606P00257500": {
+     "entry_bad": 7.4,
+     "entry_last": 7.18,
+     "entry_trades": 103,
+     "exit_bad": 3.7,
+     "exit_last": 4.79,
+     "exit_trades": 105
+    }
+   }
+  },
+  {
+   "call": "AVGO250905C00305000",
+   "date": "2025-09-04",
+   "put": "AVGO250905P00305000",
+   "spot": 303.87,
+   "strike": 305.0,
+   "windows": {
+    "AVGO250905C00305000": {
+     "entry_bad": 9.79,
+     "entry_last": 9.25,
+     "entry_trades": 563,
+     "exit_bad": 35.98,
+     "exit_last": 36.97,
+     "exit_trades": 158
+    },
+    "AVGO250905P00305000": {
+     "entry_bad": 8.2,
+     "entry_last": 8.2,
+     "entry_trades": 591,
+     "exit_bad": 0.01,
+     "exit_last": 0.01,
+     "exit_trades": 92
+    }
+   }
+  },
+  {
+   "call": "AVGO251212C00405000",
+   "date": "2025-12-11",
+   "put": "AVGO251212P00405000",
+   "spot": 404.72,
+   "strike": 405.0,
+   "windows": {
+    "AVGO251212C00405000": {
+     "entry_bad": 15.25,
+     "entry_last": 14.45,
+     "entry_trades": 311,
+     "exit_bad": 0.06,
+     "exit_last": 0.08,
+     "exit_trades": 177
+    },
+    "AVGO251212P00405000": {
+     "entry_bad": 13.0,
+     "entry_last": 12.46,
+     "entry_trades": 252,
+     "exit_bad": 29.81,
+     "exit_last": 34.05,
+     "exit_trades": 30
+    }
+   }
+  },
+  {
+   "call": "AVGO260306C00315000",
+   "date": "2026-03-04",
+   "put": "AVGO260306P00315000",
+   "spot": 315.94,
+   "strike": 315.0,
+   "windows": {
+    "AVGO260306C00315000": {
+     "entry_bad": 14.55,
+     "entry_last": 13.41,
+     "entry_trades": 130,
+     "exit_bad": 11.5,
+     "exit_last": 16.04,
+     "exit_trades": 73
+    },
+    "AVGO260306P00315000": {
+     "entry_bad": 11.14,
+     "entry_last": 11.05,
+     "entry_trades": 233,
+     "exit_bad": 1.19,
+     "exit_last": 1.52,
+     "exit_trades": 219
+    }
+   }
+  },
+  {
+   "call": "AVGO260605C00477500",
+   "date": "2026-06-03",
+   "put": "AVGO260605P00477500",
+   "spot": 477.86,
+   "strike": 477.5,
+   "windows": {
+    "AVGO260605C00477500": {
+     "entry_bad": 26.0,
+     "entry_last": 21.5,
+     "entry_trades": 53,
+     "exit_bad": 0.03,
+     "exit_last": 0.03,
+     "exit_trades": 24
+    },
+    "AVGO260605P00477500": {
+     "entry_bad": 19.95,
+     "entry_last": 19.75,
+     "entry_trades": 42,
+     "exit_bad": 70.0,
+     "exit_last": 71.59,
+     "exit_trades": 7
+    }
+   }
+  }
+ ],
+ "recorded_at": "2026-08-29T19:25:43.095433+00:00"
+}

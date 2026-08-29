@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
+from pathlib import Path
 from statistics import mean, median
 from zoneinfo import ZoneInfo
 
@@ -123,48 +125,91 @@ def summarize(label: str, values: list[float]) -> None:
           f"worst={min(values):+7.2%} best={max(values):+7.2%}")
 
 
+def observe(mcp: MCPClient, value: str) -> dict:
+    """Everything this replay ever reads from the market, for one event.
+
+    Kept separate from the arithmetic so the two can be run apart: recorded
+    once against Alpaca, then recomputed by anyone with no credentials.
+    """
+    day = dt.date.fromisoformat(value)
+    spot = stock_close(mcp, day)
+    selected = atm_contracts(mcp, day, spot) if spot else None
+    if not spot or not selected:
+        return {"date": value, "reason": "missing spot/contracts"}
+    strike, call, put = selected
+    return {"date": value, "spot": spot, "strike": strike,
+            "call": call, "put": put,
+            "windows": option_windows(mcp, day, (call, put))}
+
+
+def compute(observation: dict) -> dict:
+    """Turn one event's recorded observations into its two return estimates."""
+    if "reason" in observation:
+        return {"date": observation["date"], "reason": observation["reason"]}
+    call, put = observation["call"], observation["put"]
+    windows = observation["windows"]
+    spot, strike = observation["spot"], observation["strike"]
+    if call not in windows or put not in windows:
+        missing = "call" if call not in windows else "put"
+        return {"date": observation["date"], "spot": spot, "strike": strike,
+                "reason": f"missing {missing} trade window"}
+    entry_last = windows[call]["entry_last"] + windows[put]["entry_last"]
+    exit_last = windows[call]["exit_last"] + windows[put]["exit_last"]
+    entry_bad = windows[call]["entry_bad"] + windows[put]["entry_bad"]
+    exit_bad = windows[call]["exit_bad"] + windows[put]["exit_bad"]
+    return {
+        "date": observation["date"], "spot": spot, "strike": strike,
+        "entry_last": entry_last, "exit_last": exit_last,
+        "last_return": exit_last / entry_last - 1.0,
+        "entry_bad": entry_bad, "exit_bad": exit_bad,
+        "bad_return": exit_bad / entry_bad - 1.0,
+        "entry_trades": min(windows[call]["entry_trades"],
+                            windows[put]["entry_trades"]),
+        "exit_trades": min(windows[call]["exit_trades"],
+                           windows[put]["exit_trades"]),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default=".env.local")
+    parser.add_argument("--offline", metavar="PATH",
+                        help="recompute from a recorded snapshot; needs no "
+                             "credentials and makes no network call")
+    parser.add_argument("--snapshot", metavar="PATH",
+                        help="write the observations this run read from Alpaca")
     args = parser.parse_args()
-    env = dotenv_values(args.env)
-    key, secret = env.get("ALPACA_API_KEY"), env.get("ALPACA_SECRET_KEY")
-    if not key or not secret:
-        raise SystemExit(f"missing Alpaca credentials in {args.env}")
 
-    results = []
-    with MCPClient(key, secret, live=False, timeout=90) as mcp:
-        for value in EVENT_DATES:
-            day = dt.date.fromisoformat(value)
-            spot = stock_close(mcp, day)
-            selected = atm_contracts(mcp, day, spot) if spot else None
-            if not spot or not selected:
-                results.append({"date": value, "reason": "missing spot/contracts"})
-                continue
-            strike, call, put = selected
-            windows = option_windows(mcp, day, (call, put))
-            if call not in windows or put not in windows:
-                missing = "call" if call not in windows else "put"
-                results.append({"date": value, "spot": spot, "strike": strike,
-                                "reason": f"missing {missing} trade window"})
-                continue
-            entry_last = windows[call]["entry_last"] + windows[put]["entry_last"]
-            exit_last = windows[call]["exit_last"] + windows[put]["exit_last"]
-            entry_bad = windows[call]["entry_bad"] + windows[put]["entry_bad"]
-            exit_bad = windows[call]["exit_bad"] + windows[put]["exit_bad"]
-            results.append({
-                "date": value, "spot": spot, "strike": strike,
-                "entry_last": entry_last, "exit_last": exit_last,
-                "last_return": exit_last / entry_last - 1.0,
-                "entry_bad": entry_bad, "exit_bad": exit_bad,
-                "bad_return": exit_bad / entry_bad - 1.0,
-                "entry_trades": min(windows[call]["entry_trades"],
-                                    windows[put]["entry_trades"]),
-                "exit_trades": min(windows[call]["exit_trades"],
-                                   windows[put]["exit_trades"]),
-            })
+    if args.offline:
+        payload = json.loads(Path(args.offline).read_text())
+        observations = payload["observations"]
+        source = (f"RECORDED {payload.get('recorded_at', 'unknown')} · "
+                  f"replayed offline from {args.offline}")
+    else:
+        env = dotenv_values(args.env)
+        key, secret = env.get("ALPACA_API_KEY"), env.get("ALPACA_SECRET_KEY")
+        if not key or not secret:
+            raise SystemExit(
+                f"missing Alpaca credentials in {args.env}. "
+                f"To reproduce without credentials: --offline <snapshot.json>")
+        with MCPClient(key, secret, live=False, timeout=90) as mcp:
+            observations = [observe(mcp, value) for value in EVENT_DATES]
+        source = "LIVE read through Alpaca MCP"
+        if args.snapshot:
+            Path(args.snapshot).write_text(json.dumps({
+                "recorded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "note": "Historical five-minute option and stock trade bars "
+                        "read through Alpaca MCP. Market observations only: "
+                        "no account, position or credential data.",
+                "event_dates": list(EVENT_DATES),
+                "observations": observations,
+            }, indent=1, sort_keys=True) + "\n")
+            print(f"snapshot written to {args.snapshot}")
+
+    results = [compute(observation) for observation in observations]
 
     print("Alpaca MCP AVGO historical ATM straddle trade-bar replay")
+    print(f"source: {source}")
     print("event       spot  strike  premium  entry->exit(last)  return   conservative  min trades")
     for row in results:
         if "reason" in row:

@@ -83,6 +83,20 @@ events, the next-morning last-trade proxy returned +44.29% mean and +28.49%
 median on premium, with a 62.5% win rate. Under the frozen 8.5%-of-spot premium
 gate, six events remained: +48.42% mean and 66.7% wins.
 
+Reproduce every number in this section without credentials:
+
+```bash
+python research/strategy-evidence/replay_avgo_straddles.py \
+  --offline research/strategy-evidence/avgo_straddle_snapshot.json
+```
+
+The snapshot holds only what the replay ever read from the market — the
+event-day close, the selected strike and contract symbols, and the entry and
+exit trade-bar windows for each leg. No account, position or credential data.
+The arithmetic runs on your machine, and the offline output is byte-identical
+to the live run it was recorded from; drop `--offline` and supply paper
+credentials to re-read it from Alpaca yourself.
+
 A deliberately adverse envelope—buying each leg at its highest entry-window
 trade and selling at its lowest exit-window trade—averaged +18.06% across all
 eight and +21.30% across the gated six. This is historical option-trade-bar
