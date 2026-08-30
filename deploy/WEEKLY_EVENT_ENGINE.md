@@ -28,8 +28,8 @@ Each week the same agent can autonomously:
    requires premium/spot at most 8.5%, combined width at most 5%, fresh
    synchronized quotes, displayed size, and a near-ATM common strike.
 7. Allocate exact maximum-loss dollars across overlapping promoted events. A
-   sole qualifying event may use 25% of equity; multiple events share the 25%
-   aggregate budget with a 12.5% per-event cap, weighted by the weakest replay
+   sole qualifying event may use 40% of equity; multiple events share the 40%
+   aggregate budget with a 20% per-event cap, weighted by the weakest replay
    statistic.
 8. Manage every event on its own clock with stable client order IDs, durable
    book reconciliation, timeout recovery, next-session exit, and global

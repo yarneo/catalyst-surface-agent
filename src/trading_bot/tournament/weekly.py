@@ -330,9 +330,9 @@ def evaluate_promotion(
 
 @dataclass(frozen=True)
 class PortfolioPolicy:
-    aggregate_risk_pct: float = 0.25
-    per_event_risk_pct: float = 0.125
-    singleton_risk_pct: float = 0.25
+    aggregate_risk_pct: float = 0.40
+    per_event_risk_pct: float = 0.20
+    singleton_risk_pct: float = 0.40
 
     def __post_init__(self) -> None:
         if not 0 < self.per_event_risk_pct <= self.singleton_risk_pct \

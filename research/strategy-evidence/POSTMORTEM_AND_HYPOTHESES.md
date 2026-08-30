@@ -240,11 +240,20 @@ the remaining six, the last-trade proxy is +48.42% mean, +28.49% median, 66.7%
 wins, -66.86% worst, and +216.69% best. The adverse envelope is +21.30% mean,
 -0.31% median, 50% wins, -75.57% worst, and +154.52% best.
 
-At the frozen 25% account maximum-loss ceiling, the gated last-trade sample
-maps illustratively to +12.1% mean account P&L, +7.1% median, -16.7% worst, and
-+54.2% best. The gated adverse envelope maps to +5.3% mean, approximately flat
-median, -18.9% worst, and +38.6% best. Exact absolute loss remains capped at
-25% if both legs expire worthless.
+At the frozen 40% account maximum-loss ceiling, the gated last-trade sample
+maps illustratively to +19.4% mean account P&L, +11.4% median, -26.7% worst, and
++86.7% best. The gated adverse envelope maps to +8.5% mean, approximately flat
+median, -30.2% worst, and +61.8% best. Exact absolute loss remains capped at
+40% if both legs expire worthless.
+
+The Aug 30 competition-sizing review compared 25%, 40%, and 50% without
+changing any edge, surface, semantic, entry, or exit gate. The ordinary
+last-trade sample's empirical log-growth optimum was 81.4%, but that optimistic
+estimate is dominated by a +216.69% outlier. The deliberately adverse sample's
+optimum was 38.1%; adverse-sample geometric growth was 3.89% at 40% risk versus
+3.52% at 50%. The policy therefore uses a 40% exact-loss ceiling: aggressive
+enough for the one-opportunity measured window, but below the point where the
+conservative replay's growth deteriorated.
 
 Limitations remain material: only eight post-split events; historical option
 trades rather than quotes/NBBO; call and put trades need not share an instant;

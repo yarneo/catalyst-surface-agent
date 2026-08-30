@@ -21,6 +21,11 @@ events or no trade at all. Broader news-continuation, macro, and peer-spillover
 ideas remain disabled or shadow-only because their timestamped replays did not
 justify orders.
 
+The current plan caps exact maximum loss at 40% of equity. The Aug 30 sizing
+review chose that ceiling because the deliberately adverse six-event replay's
+empirical log-growth optimum was 38.1%; 50% increased tail loss and reduced the
+conservative sample's geometric growth. Model confidence cannot change it.
+
 ## What makes it different
 
 - **Magnitude instead of guessed direction.** The primary structure is a long
@@ -113,7 +118,7 @@ no order flag and construct no order.
 3. Require executable premium no greater than 8.5% of spot, combined bid/ask
    width no greater than 5%, each-leg width no greater than 15%, fresh
    synchronized quotes, displayed size, and a valid semantic integrity quorum.
-4. Make at most one idempotent entry attempt and cap exact maximum loss at 25%
+4. Make at most one idempotent entry attempt and cap exact maximum loss at 40%
    of current equity.
 5. Hold through the release and begin the exit at 09:45 ET the next session.
    A later emergency flatten is independent of model availability.

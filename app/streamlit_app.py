@@ -384,7 +384,7 @@ with tabs[0]:
     h2.metric("Last-trade proxy", "+48.42% mean", "4 of 6 positive",
               delta_color="off")
     h3.metric("Worst adverse proxy", "-75.57% premium",
-              "≈ -18.9% account", delta_color="off")
+              "≈ -30.2% account at 40% risk", delta_color="off")
     st.caption(
         "These are historical option-trade-bar proxies, not guaranteed returns "
         "or historical marketable fills. The live gate decides whether to trade."
@@ -397,7 +397,7 @@ with tabs[0]:
 - Buy the closest common-strike Sep 4 call and put.
 - Require premium/spot ≤ **8.5%**, total width ≤ **5%**, each leg ≤ **15%**,
   fresh synchronized quotes with displayed size, and a valid Featherless quorum.
-- Make one entry attempt; maximum loss is capped at **25% of equity**.
+- Make one entry attempt; maximum loss is capped at **40% of equity**.
 - Exit Thu at **09:45 ET**; emergency flat-by is **15:30 ET**.
             """
         )

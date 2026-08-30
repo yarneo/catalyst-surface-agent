@@ -119,8 +119,8 @@ def test_entry_window_shadow_runs_all_gates_without_consuming_live_attempt(
     assert "entry_intent" not in types
     assert not runner._entry_was_attempted(ledger)
     shadow = next(row for row in ledger.read() if row.event_type == "shadow_entry")
-    assert shadow.payload["qty"] == 8
-    assert shadow.payload["total_max_loss_usd"] == pytest.approx(23_216)
+    assert shadow.payload["qty"] == 13
+    assert shadow.payload["total_max_loss_usd"] == pytest.approx(37_726)
 
 
 def test_exit_clock_still_runs_when_reconciliation_blocks_new_entries(

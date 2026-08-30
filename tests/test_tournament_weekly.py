@@ -140,12 +140,12 @@ def test_promotion_failure_reasons_are_auditable(change, reason):
 
 def test_portfolio_allocates_singleton_budget_and_caps_overlaps():
     one = PromotionDecision("AVGO", True, .18, ("pass",))
-    assert allocate_event_risk([one], equity=100_000) == {"AVGO": 25_000}
+    assert allocate_event_risk([one], equity=100_000) == {"AVGO": 40_000}
     rows = [one, PromotionDecision("SNOW", True, .09, ("pass",)),
             PromotionDecision("PANW", True, .03, ("pass",))]
     allocation = allocate_event_risk(rows, equity=100_000)
-    assert sum(allocation.values()) == pytest.approx(25_000)
-    assert all(value <= 12_500 for value in allocation.values())
+    assert sum(allocation.values()) == pytest.approx(40_000)
+    assert all(value <= 20_000 for value in allocation.values())
     assert allocation["AVGO"] >= allocation["SNOW"] >= allocation["PANW"]
 
 

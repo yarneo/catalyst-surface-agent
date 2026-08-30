@@ -77,8 +77,8 @@ def test_daily_drawdown_halts_all_new_risk_at_the_boundary():
 
 
 def test_existing_live_risk_reduces_aggregate_room():
-    plan = run(current_max_loss_usd=24_000.0)
-    assert plan.open[0][1] == 5        # only $1,000 of 25% aggregate room
+    plan = run(current_max_loss_usd=39_000.0)
+    assert plan.open[0][1] == 5        # only $1,000 of 40% aggregate room
 
 
 def test_existing_event_exposure_reduces_event_room():
@@ -101,7 +101,7 @@ def test_invalid_limit_hierarchy_is_rejected():
         TournamentLimits(ordinary_candidate_pct=0.09,
                          exceptional_candidate_pct=0.08)
     with pytest.raises(ValueError):
-        TournamentLimits(scheduled_event_pct=0.26)
+        TournamentLimits(scheduled_event_pct=0.41)
 
 
 def test_scheduled_event_straddle_can_use_the_predeclared_convex_budget():
@@ -115,9 +115,9 @@ def test_scheduled_event_straddle_can_use_the_predeclared_convex_budget():
                   surface_lag=0.75, model_agreement=1.0, spread_capture=0.9)
     plan = run(candidates=[candidate(
         ev=ev, sp=event_spread, risk_class="scheduled_event")])
-    assert plan.open[0][1] == 8
-    assert plan.added_max_loss_usd == pytest.approx(23_920)
-    assert plan.added_max_loss_usd <= 25_000
+    assert plan.open[0][1] == 13
+    assert plan.added_max_loss_usd == pytest.approx(38_870)
+    assert plan.added_max_loss_usd <= 40_000
 
 
 def test_scheduled_event_budget_rejects_a_non_straddle():

@@ -80,9 +80,9 @@ class EntryCandidate:
 class TournamentLimits:
     ordinary_candidate_pct: float = 0.04
     exceptional_candidate_pct: float = 0.08
-    aggregate_live_pct: float = 0.25
+    aggregate_live_pct: float = 0.40
     event_pct: float = 0.10
-    scheduled_event_pct: float = 0.25
+    scheduled_event_pct: float = 0.40
     daily_loss_halt_pct: float = 0.12
     account_drawdown_halt_pct: float = 0.25
 

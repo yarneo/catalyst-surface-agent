@@ -32,7 +32,8 @@ The priority order is:
 - Featherless must return a valid grounded event-integrity quorum.
 - Strong cited evidence of early results, preliminary results, or changed
   guidance vetoes entry. The model has no expansive authority.
-- Exact maximum loss is capped at 25% of current equity.
+- Exact maximum loss is capped at 40% of current equity. This was selected in a
+  versioned Aug 30 sizing review; all non-sizing gates remain unchanged.
 - There is one stable entry attempt. A confirmed non-fill is terminal.
 - Exit begins at 09:45 ET the next session regardless of model availability.
 

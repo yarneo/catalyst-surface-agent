@@ -109,7 +109,7 @@ def make_plan(path):
             "schedule": asdict(schedule),
             "semantic": {"event_type": "earnings", "status": "upcoming"},
             "replay": {"summary": asdict(replay)},
-            "promotion": asdict(promotion), "max_loss_budget_usd": 25_000,
+            "promotion": asdict(promotion), "max_loss_budget_usd": 40_000,
         }],
     }
     atomic_write_plan(path, plan)
