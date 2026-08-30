@@ -150,7 +150,7 @@ def _display_safe(value, *, key=""):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _funnel() -> dict | None:
-    """The selection funnel, distilled from the committed shadow artifacts."""
+    """Load the credential-free artifact behind this week's sealed plan."""
     path = ROOT / "evidence" / "event_premium_funnel.json"
     if not path.exists():
         return None
@@ -282,8 +282,8 @@ if st.sidebar.button("Refresh", **STRETCH):
 
 st.title("Catalyst Surface Agent")
 st.caption(
-    "A reusable scheduled-event engine. Current deployment: one conditional, "
-    "direction-neutral AVGO earnings trade."
+    "One autonomous weekly pipeline: discover → validate → seal → execute. "
+    "This week's sealed plan contains one conditional, direction-neutral AVGO trade."
 )
 
 st.info(
@@ -309,6 +309,26 @@ m4.metric(
 tabs = st.tabs(["Overview", "Decision evidence", "Operations & audit"])
 
 with tabs[0]:
+    st.subheader("How the weekly agent reached today's action")
+    phase1, phase2, phase3, phase4 = st.columns(4)
+    with phase1:
+        st.markdown("#### 1 · Discover")
+        st.write("Scan 64 liquid names and require two calendar sources to agree.")
+    with phase2:
+        st.markdown("#### 2 · Validate")
+        st.write("Use Alpaca MCP, Featherless quorum, and historical option replays.")
+    with phase3:
+        st.markdown("#### 3 · Seal")
+        st.write("Freeze the promoted weekly plan before measured P&L begins: AVGO.")
+    with phase4:
+        st.markdown("#### 4 · Execute")
+        st.write("Recheck live gates, size exact loss, trade, reconcile, and exit autonomously.")
+    st.caption(
+        "The plan is frozen to prevent hindsight and strategy drift. AVGO is "
+        "this week's selected plan, not a separately hard-coded product."
+    )
+
+    st.divider()
     st.subheader("What happens next")
     step1, step2, step3 = st.columns(3)
     with step1:
@@ -385,12 +405,11 @@ with tabs[0]:
 with tabs[1]:
     funnel = _funnel()
     if funnel:
-        st.subheader("One trade is what survived, not what we looked at")
+        st.subheader("One trade is what survived, not what we examined")
         st.write(
-            "Every cycle the engine scans a fixed liquid universe for option "
-            "term structure implying a scheduled jump, confirms the event "
-            "against grounded sources, and replays the candidate's own option "
-            "history. This week exactly one name cleared every stage."
+            "The agent scanned its fixed liquid universe, measured event-like "
+            "option surfaces, confirmed scheduled events, and replayed each "
+            "candidate's historical options. Exactly one plan survived this week."
         )
         stages = funnel["stages"]
         columns = st.columns(len(stages))
@@ -402,11 +421,10 @@ with tabs[1]:
         st.caption(
             f"Scanned {funnel['scan_generated_at'][:10]} against the "
             f"{funnel['front_expiry']} / {funnel['back_expiry']} expiries. "
-            "Shadow research only: no artifact behind this funnel carries "
-            "order authority."
+            "Research artifacts carry no order authority."
         )
 
-        with st.expander("Every candidate, and why it did not get the trade"):
+        with st.expander("Every candidate and why it did not get the trade"):
             st.dataframe([{
                 "Ticker": row["ticker"],
                 "Term ratio": f"{row['term_ratio']:.2f}",
@@ -422,21 +440,22 @@ with tabs[1]:
             } for row in funnel["candidates"]], hide_index=True, **STRETCH)
             for row in funnel["candidates"]:
                 if row.get("replay"):
-                    st.markdown(f"**{row['ticker']} — "
-                                f"{row['replay']['disposition']}.** "
-                                f"{row['replay']['reason']}")
+                    st.markdown(
+                        f"**{row['ticker']} — {row['replay']['disposition']}.** "
+                        f"{row['replay']['reason']}"
+                    )
             st.caption(f"Replay rows quoted from `{funnel['replay_source']}`. "
                        "Regenerate this funnel with "
                        "`python scripts/build_event_premium_funnel.py`.")
 
-        with st.expander("Why 33 of 64 names could not be measured"):
+        with st.expander("Why some names could not be measured"):
             st.dataframe(funnel["skip_reasons"], hide_index=True, **STRETCH)
             st.caption(
                 "A name is skipped when its surface cannot support an "
                 "auditable measurement, never because the answer was unwanted."
             )
 
-    st.subheader("Why AVGO survived the research")
+    st.subheader("Why the weekly agent selected AVGO")
     st.write(
         "We are not predicting whether earnings are good or bad. We are buying "
         "movement only when the option price and liquidity remain acceptable."
@@ -579,6 +598,6 @@ with tabs[2]:
         )
 
 st.caption(
-    "Engine v0.4 · general event-convexity machinery, current AVGO deployment · "
+    "Catalyst Surface Agent · weekly intelligence + sealed autonomous execution · "
     "research software, not investment advice"
 )

@@ -6,9 +6,12 @@ Start here when continuing this repository for Yar and Starboi. Read this file,
 ## Current objective
 
 Maintain a reusable, fully autonomous, auditable scheduled-event paper-trading
-engine. Its current deployment is locked: one conditional AVGO near-ATM long
-straddle around the configured earnings event. Broad directional-news, macro,
-and peer-spillover order paths are disabled on current evidence.
+agent. It has one two-phase lifecycle: weekly intelligence discovers, verifies,
+replays, promotes, and seals a plan; autonomous execution consumes that plan
+without strategy drift. For the current measured week, the sealed plan contains
+one conditional AVGO near-ATM long straddle. AVGO is this week's selected plan,
+not a separate bot or permanent ticker rule. Broad directional-news, macro, and
+peer-spillover order paths are disabled on current evidence.
 
 The priority order is:
 
@@ -18,7 +21,7 @@ The priority order is:
 4. make the Featherless and Alpaca MCP contributions legible;
 5. keep normal operation fully autonomous.
 
-## Locked strategy
+## Current sealed plan
 
 - Entry window, event, expiry, exit, and emergency flatten are defined in
   `src/trading_bot/tournament/scheduled.py`.
@@ -39,6 +42,16 @@ pre-window evidence, update the decision ledger, and add behavioral tests.
 ## Architecture and ownership
 
 ```text
+scripts/build_weekly_event_plan.py
+  ├─ tournament/event_calendar.py  independent event discovery
+  ├─ tournament/event_semantics.py bounded Featherless classification
+  ├─ tournament/event_replay.py    automatic historical option replay
+  ├─ tournament/weekly.py          promotion and exact-risk allocation
+  └─ tournament/weekly_plan.py     sealed plan contract
+
+scripts/run_weekly_event_agent.py
+  └─ consumes the sealed plan and owns each event lifecycle
+
 scripts/run_event_agent.py
   ├─ options/mcp.py          Alpaca MCP transport and tool wrappers
   ├─ options/book.py         durable structure registry/reconciliation
@@ -96,6 +109,13 @@ it must never become an order surface.
   and a later 2/3 valid recovery. The third model hit the true 35-second bound.
 - The 09:45 exit and explicit 15:30 emergency-flat state both pass, including
   when reconciliation disagrees. The managed exit remains retriable.
+- A real read-only weekly rehearsal discovered AVGO from two independent
+  calendars, classified it through the Featherless committee, automatically
+  reproduced eight historical option events, sealed a prequalified plan, and
+  completed the account/MCP cycle without order authority.
+- The weekly planner correctly keeps closed-market width diagnostic-only and
+  reruns the unchanged premium, width, freshness, size, and timing gates inside
+  the actual entry window. It may seal an empty plan when evidence is weak.
 
 Detailed methods and event rows live in `research/strategy-evidence/`.
 
@@ -104,7 +124,10 @@ Detailed methods and event rows live in `research/strategy-evidence/`.
 ```bash
 uv sync
 uv run pytest tests/ -q
-uv run python -m py_compile scripts/run_event_agent.py app/streamlit_app.py
+uv run python -m py_compile scripts/run_event_agent.py \
+  scripts/build_weekly_event_plan.py scripts/run_weekly_event_agent.py \
+  app/streamlit_app.py
+uv run python scripts/check_no_secrets.py
 ```
 
 To exercise real integrations without order capability, use the shadow command

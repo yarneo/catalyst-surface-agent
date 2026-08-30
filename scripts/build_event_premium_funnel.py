@@ -63,8 +63,7 @@ REPLAY = {
 
 def _source_doc() -> str:
     """The postmortem sits under a different folder in the public export."""
-    for rel in ("research/strategy-evidence/POSTMORTEM_AND_HYPOTHESES.md",
-                "research/hackathon-v2/POSTMORTEM_AND_HYPOTHESES.md"):
+    for rel in ("research/strategy-evidence/POSTMORTEM_AND_HYPOTHESES.md",):
         if (ROOT / rel).exists():
             return rel
     return "POSTMORTEM_AND_HYPOTHESES.md"

@@ -27,8 +27,11 @@ sys.path.insert(0, str(ROOT / "src"))
 from trading_bot.tournament.audit import AuditCorrupt, AuditLedger  # noqa: E402
 
 CANDIDATES = (
-    ROOT / "evidence" / "preflight_evidence.jsonl",
     ROOT / "data" / "preflight_evidence.jsonl",
+    ROOT / "data" / "event_evidence.jsonl",
+    ROOT / "data" / "weekly_event_evidence.jsonl",
+    ROOT / "data" / "tournament_evidence.jsonl",
+    ROOT / "evidence" / "preflight_evidence.jsonl",
 )
 
 SENSITIVE = ("secret", "password", "api_key", "apikey", "authorization",

@@ -360,3 +360,59 @@ rejected ones, before presenting the final policy. It must distinguish observed
 paper fills, stock/crypto event studies, historical option-trade-bar proxies,
 current-surface feasibility calculations, and actual measured-window P&L. No
 number may move between those evidence classes without being relabeled.
+
+## Cross-sectional challenger and selection funnel — Aug 29
+
+The agent scanned a fixed 64-name liquid universe. Thirty-one names supported a
+parity-corrected front/back option measurement, nine showed event-like term
+structure, and a grounded Featherless classifier confirmed six earnings names.
+The complete credential-free funnel is published in
+`evidence/event_premium_funnel.json`.
+
+Historical Alpaca option-trade-bar replays produced:
+
+| Symbol | n | Long straddle mean | Median | Wins | Adverse mean | Adverse median |
+|---|---:|---:|---:|---:|---:|---:|
+| PANW | 8 | -32.9% | -40.2% | 25% | -44.0% | -42.6% |
+| DELL | 8 | +21.5% | -10.6% | 50% | +5.0% | -22.9% |
+| SNOW | 8 | +38.1% | +9.6% | 62% | +14.6% | -9.7% |
+| HPE | 7 | -9.5% | 0.0% | 43% | -23.1% | -20.0% |
+| AVGO | 8 | +47.0% | +45.7% | 62% | +19.6% | +17.7% |
+| LULU | 8 | +19.1% | +14.9% | 62% | +4.2% | +6.9% |
+
+The proposed rich/cheap residual was rejected for orders. It ranked AVGO, SNOW,
+and LULU as volatility sells even though direct option history favored owning
+their event convexity. PANW's favorable short-vol last-trade proxy did not
+survive an adverse execution envelope and its four-leg market was already too
+wide. SNOW remains shadow-only, while LULU resolves at the measurement cutoff.
+AVGO was the only event whose evidence, execution envelope, and exit timing all
+survived. One trade is therefore the output of a broad search, not the extent of
+the agent.
+
+## One-agent weekly rehearsal — Aug 29
+
+Catalyst Surface Agent has one lifecycle with two time-separated phases. Weekly
+intelligence discovers events, verifies them, automatically replays candidates,
+applies the frozen promotion policy, and seals a plan. Autonomous execution
+consumes that plan and repeats every mutable live gate. This prevents an LLM or
+operator from changing strategy after observing measured P&L without creating a
+separate product.
+
+The first real read-only run had Yahoo Finance and Nasdaq agree on AVGO earnings
+after the Sep 2 close. The Featherless committee accepted the supplied upcoming
+earnings facts. Automatic Alpaca MCP replay found all eight historical ATM
+call/put pairs and reproduced +46.96% mean / +45.72% median on the last-trade
+proxy and +19.62% / +17.74% under the adverse envelope. It then sealed the AVGO
+plan and completed a real account/MCP cycle in `WAIT` with no order flag.
+
+That rehearsal exposed an evidence-time bug: the first planner treated a stale
+Saturday spread as if it were the future live entry quote. The corrected policy
+uses calendar, semantic, historical, and exit-timing evidence to prequalify a
+plan, while keeping closed-market width diagnostic-only. During the real entry
+window, execution still reruns the unchanged 8.5% premium, 5% combined-width,
+freshness, synchronization, displayed-size, and near-ATM gates.
+
+The same agent can return an empty plan. Calendar disagreement, incomplete
+option history, weak adverse results, bad exit timing, failed model quorum, rich
+premium, or wide live markets all correctly produce no trade without human
+approval.

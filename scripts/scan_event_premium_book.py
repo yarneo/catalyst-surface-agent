@@ -34,38 +34,7 @@ from trading_bot.tournament.event_premium import (  # noqa: E402
     rank_cross_section,
     surface_from_mcp,
 )
-
-
-# Stable liquid anchors make the weekend scan reproducible.  MCP most-active
-# and mover lists are intentionally not the universe: on the measured Friday
-# they were dominated by penny stocks, warrants, and leveraged products.
-UNIVERSE: dict[str, str] = {
-    "AAPL": "technology", "MSFT": "technology", "NVDA": "technology",
-    "AVGO": "technology", "AMD": "technology", "INTC": "technology",
-    "MU": "technology", "QCOM": "technology", "MRVL": "technology",
-    "ORCL": "technology", "CRM": "technology", "ADBE": "technology",
-    "IBM": "technology", "CSCO": "technology", "DELL": "technology",
-    "HPE": "technology", "SNOW": "technology", "PLTR": "technology",
-    "CRWD": "technology", "PANW": "technology", "ZS": "technology",
-    "NOW": "technology", "DDOG": "technology", "NET": "technology",
-    "GOOGL": "communication", "META": "communication",
-    "NFLX": "communication", "DIS": "communication",
-    "AMZN": "consumer_discretionary", "TSLA": "consumer_discretionary",
-    "HD": "consumer_discretionary", "LOW": "consumer_discretionary",
-    "MCD": "consumer_discretionary", "SBUX": "consumer_discretionary",
-    "NKE": "consumer_discretionary", "LULU": "consumer_discretionary",
-    "BKNG": "consumer_discretionary", "ABNB": "consumer_discretionary",
-    "UBER": "consumer_discretionary", "COST": "consumer_staples",
-    "WMT": "consumer_staples", "PG": "consumer_staples",
-    "JPM": "financials", "BAC": "financials", "GS": "financials",
-    "MS": "financials", "V": "financials", "MA": "financials",
-    "PYPL": "financials", "COIN": "financials", "HOOD": "financials",
-    "UNH": "healthcare", "LLY": "healthcare", "JNJ": "healthcare",
-    "MRK": "healthcare", "PFE": "healthcare", "ABBV": "healthcare",
-    "CAT": "industrials", "BA": "industrials", "GE": "industrials",
-    "RTX": "industrials", "FDX": "industrials", "XOM": "energy",
-    "CVX": "energy",
-}
+from trading_bot.tournament.event_universe import UNIVERSE  # noqa: E402
 
 
 def _digest(value: Any) -> str:

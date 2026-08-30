@@ -7,10 +7,17 @@ reconciliation, and a tamper-evident result ledger.
 
 [Open the live dashboard](https://catalyst-surface-agent.streamlit.app/)
 
-The engine is general; its current deployment is deliberately narrow:
-conditionally buy a near-the-money AVGO earnings straddle when the executable
-option surface passes a frozen threshold, then exit at the same next-morning
-horizon used in research. Broader news-continuation, macro, and peer-spillover
+Catalyst Surface Agent is one reusable agent with two time-separated phases.
+Weekly intelligence discovers scheduled events, verifies independent calendar
+and semantic evidence, replays each candidate's historical options, applies a
+frozen promotion rule, and seals the resulting plan. Autonomous execution then
+consumes that plan, repeats every mutable live-market gate, allocates exact
+maximum-loss risk, trades, reconciles, and exits on the market's clock.
+
+For the current measured week, the process selected one conditional AVGO
+earnings straddle. AVGO is the content of this week's sealed plan—not a second
+bot or permanent ticker rule. A subsequent plan may contain other qualified
+events or no trade at all. Broader news-continuation, macro, and peer-spillover
 ideas remain disabled or shadow-only because their timestamped replays did not
 justify orders.
 
@@ -18,6 +25,9 @@ justify orders.
 
 - **Magnitude instead of guessed direction.** The primary structure is a long
   call plus long put, so the maximum loss is exactly the premium paid.
+- **Auditable weekly discovery.** A fixed 64-name liquid universe is checked
+  against independent event calendars and historical option outcomes before a
+  plan receives a cryptographic seal.
 - **Featherless as a bounded semantic gate.** A multi-model committee checks
   source-grounded event integrity before entry and parses the release after it
   arrives. It may veto risk; it cannot create an order, select quantity, relax a
@@ -55,8 +65,9 @@ The published, credential-free hash chain at
   its novelty/surprise/confidence vector and per-model latency;
 - `policy_gate_changed=false` throughout.
 
-The dashboard makes the failed models, rejected strategies, MCP lifecycle, and
-autonomous evidence chain visible instead of presenting only the final trade.
+The dashboard makes the 64 → 31 → 9 → 6 → 1 selection funnel, failed models,
+rejected strategies, MCP lifecycle, and autonomous evidence chain visible
+instead of presenting only the final trade.
 
 ## One trade is what survived, not what we looked at
 
@@ -94,9 +105,9 @@ scanner survives as audited discovery; the ranking has no order authority.
 `scan_event_premium_book.py` and `classify_event_premium_candidates.py` contain
 no order flag and construct no order.
 
-## Frozen policy
+## Current sealed plan
 
-1. Observe the predeclared Broadcom earnings event.
+1. Observe the Broadcom earnings event selected before measurement.
 2. During the configured pre-close window, select the closest common-strike
    call and put expiring at the end of the measurement week.
 3. Require executable premium no greater than 8.5% of spot, combined bid/ask
@@ -144,15 +155,19 @@ position. Full methods and event-level outcomes are in
 ## Architecture
 
 ```text
-one-minute supervisor
+weekly intelligence
+        |
+        +----> two independent calendars + Alpaca MCP history
+        +----> Featherless typed committee
+        +----> deterministic replay + frozen promotion policy
+        v
+SHA-256-sealed weekly plan
         |
         v
-Alpaca MCP discovery + account truth
+one-minute autonomous execution
         |
-        +----> Featherless typed committee
-        |          |
-        |          v
-        |     non-expansive integrity veto
+        +----> Alpaca MCP account, clock, news and option truth
+        +----> Featherless non-expansive integrity veto
         v
 deterministic surface + exact-risk gates
         |
@@ -166,6 +181,11 @@ hash-chained JSONL evidence + read-only dashboard
 Key modules:
 
 - `scripts/run_event_agent.py` — one autonomous cycle; shadow mode by default.
+- `scripts/build_weekly_event_plan.py` — discover, verify, replay, promote, and
+  seal the next plan.
+- `scripts/run_weekly_event_agent.py` — execute every event in a sealed plan.
+- `scripts/run_weekly_event_rehearsal.py` — deterministic failure drills plus a
+  real read-only weekly cycle.
 - `scripts/capture_surface_diagnostic.py` — read-only multi-strike IV capture.
 - `scripts/capture_semantic_preflight.py` — live typed surprise-vector probe.
 - `scripts/run_event_rehearsal.py` — real shadow cycle plus named failure drills.
@@ -174,6 +194,8 @@ Key modules:
 - `src/trading_bot/tournament/integrity.py` — semantic veto boundary.
 - `src/trading_bot/tournament/decision.py` — exact contract-level risk planner.
 - `src/trading_bot/tournament/audit.py` — hash-chained, secret-redacting ledger.
+- `src/trading_bot/tournament/weekly.py` — promotion, allocation, and per-event
+  lifecycle policy.
 - `src/trading_bot/options/` — chain, payoff, order, registry, and MCP mechanics.
 - `app/streamlit_app.py` — read-only strategy, evidence, and P&L dashboard.
 
@@ -218,6 +240,16 @@ Shadow mode can read real market/account data but has no broker write path.
 Paper orders require both the `--enable-orders` flag and the explicit
 `TOURNAMENT_ENABLE_ORDERS=YES` environment switch. Do not enable either against
 a live-money account.
+
+Build and rehearse a subsequent weekly plan without order authority:
+
+```bash
+uv run python scripts/build_weekly_event_plan.py --env .env.local
+uv run python scripts/run_weekly_event_rehearsal.py --real
+```
+
+The full two-phase operating contract is in
+[`deploy/WEEKLY_EVENT_ENGINE.md`](deploy/WEEKLY_EVENT_ENGINE.md).
 
 Run the dashboard:
 
