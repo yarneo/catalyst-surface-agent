@@ -3,6 +3,30 @@
 Start here when continuing this repository for Yar and Starboi. Read this file,
 `README.md`, and the tests before changing strategy or execution behavior.
 
+## Repository boundary
+
+This public repository, `yarneo/catalyst-surface-agent`, on `main`, is the
+canonical collaborator-facing project. Commit and push all shareable source,
+tests, research, dashboard work, and documentation here.
+
+The separate `trading-bot` checkout is used only by the host running the paper
+deployment and contains private environment and supervisor configuration. Its
+`simplify-for-kickoff` branch is a legacy development branch, not a project or
+contribution target. Never copy credentials, account identifiers, mutable
+books, runtime ledgers, logs, or host-specific launch configuration from that
+checkout into this repository.
+
+## Current deployment status
+
+As of Mon Aug 31 at 08:57 ET, the host-local paper deployment is armed and
+healthy. The pinned account was reverified at exactly $100,000, flat,
+unblocked, and options level 3; both independent order interlocks are enabled;
+repeated one-minute cycles have exited successfully with `WAIT`; and a fresh
+Featherless preflight returned a valid 2/3 quorum with full agreement. Policy
+intentionally permits no entry Monday or Tuesday. The conditional entry window
+remains Wed Sep 2, 15:20–15:40 ET. No credentials, account identifiers, or
+mutable runtime evidence are published here.
+
 ## Current objective
 
 Maintain a reusable, fully autonomous, auditable scheduled-event paper-trading
@@ -154,7 +178,9 @@ options level. The repository intentionally contains no real account metadata.
 ## Remaining integration work
 
 - Keep the dedicated paper account and host-specific supervisor configuration
-  outside Git; repeat identity/flatness verification immediately before arming.
+  outside Git. The host deployment is already armed; do not repeat activation
+  merely to verify it. Use read-only identity, account, supervisor, and cycle
+  checks instead.
 - Capture measured-window account, activity, position, portfolio-history, model,
   and decision-ledger snapshots for the final results narrative.
 - Keep the existing gate frozen unless genuinely new evidence falsifies it.
