@@ -44,6 +44,28 @@ def test_live_flag_must_be_explicit():
     assert MCPClient("k", "s").live is False
 
 
+def test_server_runtime_excludes_incompatible_fastmcp_4(monkeypatch):
+    """The Alpaca server currently imports a module removed by FastMCP 4.
+    An unconstrained uvx launch therefore exits before MCP initialization."""
+    seen = {}
+
+    def fake_popen(argv, **kwargs):
+        seen["argv"] = argv
+        return SimpleNamespace()
+
+    c = MCPClient("k", "s")
+    monkeypatch.setattr("trading_bot.options.mcp.subprocess.Popen", fake_popen)
+    monkeypatch.setattr(c, "_drain_stdout", lambda: None)
+    monkeypatch.setattr(c, "_drain_stderr", lambda: None)
+    monkeypatch.setattr(c, "_rpc", lambda method, params: {"serverInfo": {}})
+    monkeypatch.setattr(c, "_notify", lambda method, params: None)
+    c.start()
+    assert seen["argv"] == [
+        "uvx", "--from", "alpaca-mcp-server", "--with", "fastmcp<4",
+        "alpaca-mcp-server",
+    ]
+
+
 # ------------------------------------------------------------ idempotency
 
 
