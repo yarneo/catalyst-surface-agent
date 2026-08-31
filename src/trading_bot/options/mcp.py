@@ -58,7 +58,8 @@ class MCPClient:
         env["ALPACA_PAPER_TRADE"] = str(self.paper)
         env["PAPER"] = str(self.paper)
         self._proc = subprocess.Popen(
-            ["uvx", "--from", "alpaca-mcp-server", "alpaca-mcp-server"],
+            ["uvx", "--from", "alpaca-mcp-server", "--with", "fastmcp<4",
+             "alpaca-mcp-server"],
             # stderr is PIPEd and then DRAINED (see _drain_stderr). An unread
             # pipe fills its OS buffer and blocks the writer permanently.
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
