@@ -105,7 +105,7 @@ def _credentials() -> tuple[str | None, str | None]:
         return values.get("ALPACA_API_KEY"), values.get("ALPACA_SECRET_KEY")
 
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=15, show_spinner=False)
 def _account() -> dict | None:
     import requests
     key, secret = _credentials()
@@ -285,6 +285,7 @@ st.caption(
     "One autonomous weekly pipeline: discover → validate → seal → execute. "
     "This week's sealed plan contains one conditional, direction-neutral AVGO trade."
 )
+st.caption(f"Live dashboard · broker refresh ≤ 15 seconds · checked {now:%H:%M:%S ET}")
 
 st.info(
     f"### Current action: {action}\n"
@@ -381,45 +382,53 @@ with tabs[0]:
     elif account_error:
         st.warning(f"Live broker read unavailable: {account_error}")
     elif account_payload is not None:
-        st.info("Alpaca is connected and currently reports no open position.")
+        if POLICY.entry_end < now < POLICY.exit_at:
+            st.error(
+                "ACCOUNT MISMATCH — this dashboard sees no broker position even "
+                "though the entry window has passed. If Alpaca shows the AVGO "
+                "position, this Streamlit deployment is connected to the wrong "
+                "paper account."
+            )
+        else:
+            st.info("Alpaca is connected and currently reports no open position.")
     else:
         st.info("Live account state is available only in the private deployment.")
 
-    st.subheader("Preflight surface · historical diagnostic")
-    if surface_row:
-        diagnostic = surface_row.payload.get("diagnostic", {})
-        premium = diagnostic.get("executable_premium_to_spot")
-        width = diagnostic.get("total_spread_pct")
-        fresh = bool(surface_row.payload.get("fresh_for_entry"))
-        gate_rows = [
-            {
-                "Gate": "Premium / spot",
-                "Observed": f"{premium:.2%}" if premium is not None else "—",
-                "Required": "≤ 8.50%",
-                "Result": "✅ Under limit" if premium is not None and premium <= 0.085
-                else "❌ Over limit",
-            },
-            {
-                "Gate": "Combined bid/ask width",
-                "Observed": f"{width:.2%}" if width is not None else "—",
-                "Required": "≤ 5.00%",
-                "Result": "✅ Pass" if width is not None and width <= 0.05
-                else "❌ Too wide",
-            },
-            {
-                "Gate": "Fresh, live quotes",
-                "Observed": "Fresh" if fresh else "Closed-market snapshot",
-                "Required": "Fresh during entry",
-                "Result": "✅ Pass" if fresh else "❌ Not tradable",
-            },
-        ]
-        st.dataframe(gate_rows, hide_index=True, **STRETCH)
-        st.caption(
-            "This is the published Saturday rehearsal snapshot, retained for audit. "
-            "It is not the surface that opened the live broker position above."
+    with st.expander("Archived Saturday rehearsal (not live)"):
+        st.warning(
+            "HISTORICAL ONLY — these numbers are retained as audit evidence. "
+            "They did not make today's entry decision and do not update."
         )
-    else:
-        st.info("No surface snapshot has been captured yet.")
+        if surface_row:
+            diagnostic = surface_row.payload.get("diagnostic", {})
+            premium = diagnostic.get("executable_premium_to_spot")
+            width = diagnostic.get("total_spread_pct")
+            fresh = bool(surface_row.payload.get("fresh_for_entry"))
+            gate_rows = [
+                {
+                    "Gate": "Premium / spot",
+                    "Observed": f"{premium:.2%}" if premium is not None else "—",
+                    "Required": "≤ 8.50%",
+                    "Result": "✅ Under limit" if premium is not None and premium <= 0.085
+                    else "❌ Over limit",
+                },
+                {
+                    "Gate": "Combined bid/ask width",
+                    "Observed": f"{width:.2%}" if width is not None else "—",
+                    "Required": "≤ 5.00%",
+                    "Result": "✅ Pass" if width is not None and width <= 0.05
+                    else "❌ Too wide",
+                },
+                {
+                    "Gate": "Fresh, live quotes",
+                    "Observed": "Fresh" if fresh else "Closed-market snapshot",
+                    "Required": "Fresh during entry",
+                    "Result": "✅ Pass" if fresh else "❌ Not tradable",
+                },
+            ]
+            st.dataframe(gate_rows, hide_index=True, **STRETCH)
+        else:
+            st.info("No rehearsal surface was published.")
 
     st.subheader("Why the entry was conditional" if positions
                  else "Why this trade is still only conditional")
