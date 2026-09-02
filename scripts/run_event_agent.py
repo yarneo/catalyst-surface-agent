@@ -169,6 +169,34 @@ def _entry_was_attempted(ledger: AuditLedger) -> bool:
     return _latest_event(ledger, "entry_intent") is not None
 
 
+def _pending_exit_attempt(ledger: AuditLedger, entry_id: str) -> str | None:
+    """Return an exit attempt that is still unsafe to supersede.
+
+    A process can die after Alpaca accepts an order but before the result is
+    recorded. A ``stuck`` result likewise means an order may still be live.
+    Both cases must reuse the same client-order IDs; completed/unfilled/partial
+    attempts must get fresh IDs so a later cycle does not replay old fills.
+    """
+    rows = ledger.read()
+    results = {
+        (row.payload.get("entry_id"), row.payload.get("client_order_id")):
+        row.payload.get("fill", {}).get("how")
+        for row in rows if row.event_type == "exit_result"
+    }
+    for row in reversed(rows):
+        if row.event_type != "exit_intent" \
+                or row.payload.get("entry_id") != entry_id:
+            continue
+        base = row.payload.get("client_order_id")
+        if not isinstance(base, str) or not base:
+            continue
+        outcome = results.get((entry_id, base))
+        if outcome is None or outcome == "stuck":
+            return base
+        return None
+    return None
+
+
 def _recover_entry(mcp: MCPClient, book: Book, ledger: AuditLedger,
                    now: dt.datetime) -> None:
     if book.open_entries or not _entry_was_attempted(ledger):
@@ -298,9 +326,19 @@ def _exit(mcp: MCPClient, book: Book, ledger: AuditLedger, now: dt.datetime,
         return 0
     attention = False
     for entry in list(book.open_entries):
-        ledger.append("exit_intent", {"entry_id": entry.id, "qty": entry.qty,
-                      "reason": reason, "client_order_id": EXIT_COID},
-                      recorded_at=now)
+        attempt_base = _pending_exit_attempt(ledger, entry.id)
+        if attempt_base is None:
+            suffix = hashlib.sha256(entry.id.encode()).hexdigest()[:4]
+            attempt_base = f"{EXIT_COID}-{suffix}-{now:%H%M%S%f}"
+            ledger.append("exit_intent", {
+                "entry_id": entry.id, "qty": entry.qty, "reason": reason,
+                "client_order_id": attempt_base,
+            }, recorded_at=now)
+        else:
+            ledger.append("exit_retry", {
+                "entry_id": entry.id, "qty": entry.qty, "reason": reason,
+                "client_order_id": attempt_base,
+            }, recorded_at=now)
 
         def quote_fn(symbols):
             return _quote_map(
@@ -308,9 +346,10 @@ def _exit(mcp: MCPClient, book: Book, ledger: AuditLedger, now: dt.datetime,
                 symbols)
 
         fill = close_spread(mcp, entry.as_legs(), entry.qty, quote_fn,
-                            client_order_id=EXIT_COID)
+                            client_order_id=attempt_base)
         ledger.append("exit_result", {"entry_id": entry.id, "fill": fill,
-                      "reason": reason}, recorded_at=now)
+                      "reason": reason, "client_order_id": attempt_base},
+                      recorded_at=now)
         if fill.how == "stuck" or not fill:
             attention = True
             log(f"{entry.id}: exit {fill.how}; remains managed and will retry")
@@ -343,9 +382,6 @@ def main() -> int:
     featherless_key = config.get("FEATHERLESS_API_KEY")
     if not key or not secret:
         log("missing Alpaca credentials")
-        return 5
-    if not featherless_key and not args.verify_account and not args.flatten:
-        log("missing Featherless API key")
         return 5
     if args.enable_orders and config.get("TOURNAMENT_ENABLE_ORDERS") != "YES":
         log("orders disabled: TOURNAMENT_ENABLE_ORDERS must equal YES")
@@ -433,6 +469,8 @@ def main() -> int:
                     log(f"NO TRADE — {'; '.join(surface_decision.reasons)}")
                     code = 0
                 else:
+                    if not featherless_key:
+                        raise ValueError("missing Featherless API key")
                     facts, committee, _ = _committee(
                         mcp, str(featherless_key), ledger, now, refresh=True)
                     # A same-batch cache cannot happen on the one permitted entry
@@ -462,6 +500,8 @@ def main() -> int:
                 code = 0
         elif action == "HOLD" and now >= POLICY.event_at:
             try:
+                if not featherless_key:
+                    raise ValueError("missing Featherless API key")
                 facts, committee, fact_hash = _committee(
                     mcp, str(featherless_key), ledger, now)
                 if committee is not None:
