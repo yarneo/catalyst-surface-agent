@@ -110,7 +110,7 @@ def test_entry_window_shadow_runs_all_gates_without_consuming_live_attempt(
         "Broadcom to announce results", "Event remains scheduled.", ("AVGO",))
     result = CommitteeResult((), assessment(), 1.0, "2/2 agree unknown")
     monkeypatch.setattr(runner, "_committee",
-                        lambda *args: ([fact], result, "hash"))
+                        lambda *args, **kwargs: ([fact], result, "hash"))
     rc, _, book, ledger = drive(runner, monkeypatch, tmp_path, now)
     types = [row.event_type for row in ledger.read()]
     assert rc == 0 and book.open_entries == []
@@ -185,7 +185,7 @@ def test_post_event_hold_records_featherless_semantics_without_changing_exit(
         "Broadcom reported quarterly results", "Guidance was issued.", ("AVGO",))]
     result = CommitteeResult((), assessment(), 1.0, "2/2 agree unknown")
     monkeypatch.setattr(runner, "_committee",
-                        lambda *args: (facts, result, "post-hash"))
+                        lambda *args, **kwargs: (facts, result, "post-hash"))
     positions = [{"symbol": leg["symbol"], "qty": "1"} for leg in legs]
     rc, _, book, ledger = drive(
         runner, monkeypatch, tmp_path, now, positions=positions)
@@ -211,7 +211,7 @@ def test_live_entry_records_actual_fill_before_next_cycle(
         "Broadcom to announce results", "Event remains scheduled.", ("AVGO",))
     result = CommitteeResult((), assessment(), 1.0, "2/2 agree unknown")
     monkeypatch.setattr(runner, "_committee",
-                        lambda *args: ([fact], result, "hash"))
+                        lambda *args, **kwargs: ([fact], result, "hash"))
     monkeypatch.setattr(
         runner, "open_spread",
         lambda *args, **kwargs: Fill(True, 7, 28.95, 1, "partial"))
@@ -232,3 +232,16 @@ def test_latest_stock_trade_must_be_fresh(runner):
     with pytest.raises(ValueError, match="stale"):
         runner._latest_spot({"AVGO": {"latestTrade": {
             "p": 366, "t": old.isoformat()}}}, now=now)
+
+
+def test_latest_stock_trade_allows_bounded_forward_clock_skew(runner):
+    now = dt.datetime(2026, 9, 2, 15, 20, tzinfo=ET)
+    snapshot = {"AVGO": {"latestTrade": {
+        "p": 366, "t": (now + dt.timedelta(seconds=3)).isoformat()}}}
+
+    assert runner._latest_spot(snapshot, now=now) == 366
+
+    snapshot["AVGO"]["latestTrade"]["t"] = (
+        now + dt.timedelta(seconds=11)).isoformat()
+    with pytest.raises(ValueError, match="future-dated"):
+        runner._latest_spot(snapshot, now=now)
