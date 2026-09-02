@@ -331,18 +331,61 @@ with tabs[0]:
     st.divider()
     st.subheader("What happens next")
     step1, step2, step3 = st.columns(3)
-    with step1:
-        st.markdown("#### 1 · Observe")
-        st.write("Now through Wednesday: stay flat and keep checking account, data, and event integrity.")
-    with step2:
-        st.markdown("#### 2 · Decide")
-        st.write("Wednesday 15:20–15:40 ET: buy the straddle only if every frozen gate passes.")
-    with step3:
-        st.markdown("#### 3 · Exit")
-        st.write("Thursday 09:45 ET: close. At 15:30 ET, any unresolved close is an emergency.")
+    if positions:
+        with step1:
+            st.markdown("#### 1 · Entered")
+            st.write(f"Alpaca currently confirms {len(positions)} open option legs.")
+        with step2:
+            st.markdown("#### 2 · Hold")
+            st.write("Keep the direction-neutral position through tonight's earnings event.")
+        with step3:
+            st.markdown("#### 3 · Exit")
+            st.write("Thursday 09:45 ET: close. At 15:30 ET, any unresolved close is an emergency.")
+    else:
+        with step1:
+            st.markdown("#### 1 · Observe")
+            st.write("Now through Wednesday: stay flat and keep checking account, data, and event integrity.")
+        with step2:
+            st.markdown("#### 2 · Decide")
+            st.write("Wednesday 15:20–15:40 ET: buy only if every frozen gate passes.")
+        with step3:
+            st.markdown("#### 3 · Exit")
+            st.write("Thursday 09:45 ET: close. At 15:30 ET, any unresolved close is an emergency.")
 
     st.divider()
-    st.subheader("Latest surface check")
+    st.subheader("Live deployment")
+    if positions:
+        entry_debit = sum(float(row.get("avg_entry_price") or 0)
+                          for row in positions)
+        total_qty = min(abs(float(row.get("qty") or 0)) for row in positions)
+        premium_paid = entry_debit * total_qty * 100
+        unrealized = sum(float(row.get("unrealized_pl") or 0)
+                         for row in positions)
+        st.success(
+            f"POSITION OPEN — Alpaca reports {len(positions)} live legs. "
+            "The entry gates passed and the autonomous order filled."
+        )
+        live1, live2, live3 = st.columns(3)
+        live1.metric("Straddles", f"{total_qty:g}")
+        live2.metric("Combined entry debit", f"${entry_debit:,.2f}")
+        live3.metric("Premium deployed", f"${premium_paid:,.0f}",
+                     f"Unrealized P&L ${unrealized:+,.0f}", delta_color="off")
+        st.dataframe([{
+            "Contract": row.get("symbol"),
+            "Qty": row.get("qty"),
+            "Average entry": row.get("avg_entry_price"),
+            "Current value": row.get("market_value"),
+            "Unrealized P&L": row.get("unrealized_pl"),
+        } for row in positions], hide_index=True, **STRETCH)
+        st.caption("Live read-only broker state. Refreshes at most once per minute.")
+    elif account_error:
+        st.warning(f"Live broker read unavailable: {account_error}")
+    elif account_payload is not None:
+        st.info("Alpaca is connected and currently reports no open position.")
+    else:
+        st.info("Live account state is available only in the private deployment.")
+
+    st.subheader("Preflight surface · historical diagnostic")
     if surface_row:
         diagnostic = surface_row.payload.get("diagnostic", {})
         premium = diagnostic.get("executable_premium_to_spot")
@@ -371,14 +414,15 @@ with tabs[0]:
             },
         ]
         st.dataframe(gate_rows, hide_index=True, **STRETCH)
-        st.warning(
-            "Bottom line: this Saturday snapshot is useful diagnostics, but it "
-            "would not permit a trade. Wednesday's fresh snapshot makes the real decision."
+        st.caption(
+            "This is the published Saturday rehearsal snapshot, retained for audit. "
+            "It is not the surface that opened the live broker position above."
         )
     else:
         st.info("No surface snapshot has been captured yet.")
 
-    st.subheader("Why this trade is still only conditional")
+    st.subheader("Why the entry was conditional" if positions
+                 else "Why this trade is still only conditional")
     h1, h2, h3 = st.columns(3)
     h1.metric("Historical gated sample", "6 events")
     h2.metric("Last-trade proxy", "+48.42% mean", "4 of 6 positive",
@@ -387,7 +431,10 @@ with tabs[0]:
               "≈ -30.2% account at 40% risk", delta_color="off")
     st.caption(
         "These are historical option-trade-bar proxies, not guaranteed returns "
-        "or historical marketable fills. The live gate decides whether to trade."
+        "or historical marketable fills. " + (
+            "The live gate passed; Alpaca now reports the resulting position above."
+            if positions else "The live gate decides whether to trade."
+        )
     )
 
     with st.expander("Exact frozen rules"):
