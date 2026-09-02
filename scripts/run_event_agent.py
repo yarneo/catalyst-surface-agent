@@ -67,7 +67,8 @@ def _positions(raw: Any) -> tuple[dict[str, int], list[dict[str, Any]]]:
 
 
 def _latest_spot(snapshot: Any, *, now: dt.datetime,
-                 max_age_s: float = 90.0) -> float:
+                 max_age_s: float = 90.0,
+                 max_future_skew_s: float = 10.0) -> float:
     try:
         row = snapshot[POLICY.underlying]
         trade = row["latestTrade"]
@@ -77,7 +78,9 @@ def _latest_spot(snapshot: Any, *, now: dt.datetime,
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("stock snapshot lacks a valid latest AVGO trade") from exc
     age = (now.astimezone(ET) - stamp).total_seconds()
-    if not 0 <= age <= max_age_s:
+    # IEX timestamps can lead the host wall clock by a few seconds. Permit a
+    # tightly bounded feed/host skew without weakening the 90-second freshness.
+    if not -max_future_skew_s <= age <= max_age_s:
         raise ValueError(f"AVGO trade is stale or future-dated ({age:.1f}s)")
     if price <= 0:
         raise ValueError("AVGO trade price is non-positive")
@@ -136,7 +139,7 @@ def _fact_hash(facts: list[CatalystFact]) -> str:
 
 
 def _committee(mcp: MCPClient, featherless_key: str, ledger: AuditLedger,
-               now: dt.datetime):
+               now: dt.datetime, *, refresh: bool = False):
     news = mcp.news(symbols="AVGO", start="2026-08-28", limit=50,
                     sort="desc", include_content=False)
     facts = [_official_fact(), *_news_facts(news)]
@@ -144,7 +147,7 @@ def _committee(mcp: MCPClient, featherless_key: str, ledger: AuditLedger,
     prior = [row for row in ledger.read()
              if row.event_type == "featherless_committee"
              and row.payload.get("fact_hash") == batch_hash]
-    if prior:
+    if prior and not refresh:
         # Entry integrity needs the typed object, not merely a cached prose row.
         # Re-run only during entry; HOLD cycles can safely record the cache hit.
         return facts, None, batch_hash
@@ -431,7 +434,7 @@ def main() -> int:
                     code = 0
                 else:
                     facts, committee, _ = _committee(
-                        mcp, str(featherless_key), ledger, now)
+                        mcp, str(featherless_key), ledger, now, refresh=True)
                     # A same-batch cache cannot happen on the one permitted entry
                     # attempt; if it does, fail closed rather than deserialize a
                     # model object from prose.
