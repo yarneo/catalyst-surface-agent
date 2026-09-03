@@ -18,34 +18,33 @@ checkout into this repository.
 
 ## Current deployment status
 
-As of Mon Aug 31 at 08:57 ET, the host-local paper deployment is armed and
-healthy. The pinned account was reverified at exactly $100,000, flat,
-unblocked, and options level 3; both independent order interlocks are enabled;
-repeated one-minute cycles have exited successfully with `WAIT`; and a fresh
-Featherless preflight returned a valid 2/3 quorum with full agreement. Policy
-intentionally permits no entry Monday or Tuesday. The conditional entry window
-remains Wed Sep 2, 15:20–15:40 ET. No credentials, account identifiers, or
-mutable runtime evidence are published here.
+The measured lifecycle is complete. The agent bought 13 AVGO Sep 4 $367.50
+straddles at a $29.60 combined debit on Sep 2 and autonomously exited at
+09:45:18 ET on Sep 3 for a $21.37 credit. Final paper equity was $89,299.30:
+-$10,700.70, or -10.7007%. The broker is flat. After the terminal-state fix, a
+clean supervisor cycle reported `DONE` with zero open positions. Reviewed,
+credential-free figures are in `evidence/measured_result.json`; mutable account
+books, ledgers, order IDs, and logs remain private.
 
 ## Current objective
 
-Maintain a reusable, fully autonomous, auditable scheduled-event paper-trading
-agent. It has one two-phase lifecycle: weekly intelligence discovers, verifies,
-replays, promotes, and seals a plan; autonomous execution consumes that plan
-without strategy drift. For the current measured week, the sealed plan contains
-one conditional AVGO near-ATM long straddle. AVGO is this week's selected plan,
-not a separate bot or permanent ticker rule. Broad directional-news, macro, and
-peer-spillover order paths are disabled on current evidence.
+Present the measured result honestly, preserve the reusable autonomous engine,
+and develop the stricter version-2 hypothesis in `docs/FINAL_POSTMORTEM.md`.
+Weekly intelligence still discovers, verifies, replays, promotes, and seals a
+plan; autonomous execution consumes that plan without strategy drift. AVGO was
+the measured week's selected result, not a separate bot or permanent ticker
+rule. Broad directional-news, macro, and peer-spillover order paths remain
+disabled on current evidence.
 
 The priority order is:
 
 1. preserve account, deadline, and exact-risk invariants;
 2. preserve a truthful evidence trail;
-3. maximize measured P&L inside the frozen policy;
+3. improve expected P&L only through new falsifiable evidence;
 4. make the Featherless and Alpaca MCP contributions legible;
 5. keep normal operation fully autonomous.
 
-## Current sealed plan
+## Completed measured plan
 
 - Entry window, event, expiry, exit, and emergency flatten are defined in
   `src/trading_bot/tournament/scheduled.py`.
@@ -61,8 +60,9 @@ The priority order is:
 - There is one stable entry attempt. A confirmed non-fill is terminal.
 - Exit begins at 09:45 ET the next session regardless of model availability.
 
-Changing any item above is a strategy change, not a refactor. Require new
-pre-window evidence, update the decision ledger, and add behavioral tests.
+These rules are frozen historical facts for the measured run. Do not edit them
+to make the result look better. A future policy is a new version: require new
+evidence, update the decision record, and add behavioral tests.
 
 ## Architecture and ownership
 
@@ -141,6 +141,15 @@ it must never become an order surface.
 - The weekly planner correctly keeps closed-market width diagnostic-only and
   reruns the unchanged premium, width, freshness, size, and timing gates inside
   the actual entry window. It may seal an empty plan when evidence is weak.
+- The measured entry deployed $38,480 (38.48% of starting equity). The
+  straddle's -27.80% return produced a -10.70% account return.
+- The live 8.05%-of-spot debit was inside the 8.5% gate but above every premium
+  in the accepted six-event historical sample. This unsupported extrapolation
+  and the small sample are central strategy lessons, not footnotes.
+- The scheduled exit filled within 18 seconds of 09:45 ET and broker truth was
+  flat. A later local recovery bug recreated a phantom registry row but
+  close-only order semantics prevented reverse exposure. Recovery now treats a
+  closed event row as terminal and has a regression test.
 
 Detailed methods and event rows live in `research/strategy-evidence/`.
 
@@ -175,15 +184,17 @@ options level. The repository intentionally contains no real account metadata.
 7. Update README and dashboard when implementation changes what users see.
 8. Never reinterpret weak or missing evidence as permission to trade.
 
-## Remaining integration work
+## Remaining work
 
 - Keep the dedicated paper account and host-specific supervisor configuration
-  outside Git. The host deployment is already armed; do not repeat activation
-  merely to verify it. Use read-only identity, account, supervisor, and cycle
-  checks instead.
-- Capture measured-window account, activity, position, portfolio-history, model,
-  and decision-ledger snapshots for the final results narrative.
-- Keep the existing gate frozen unless genuinely new evidence falsifies it.
+  outside Git. The measured deployment is already flat and complete.
+- Treat `evidence/measured_result.json` as the immutable public result summary;
+  never replace it with mutable books, ledgers, or logs.
+- Use `docs/ONE_PAGE_OVERVIEW.md` and `docs/DEMO_NARRATION.md` for the public
+  explanation. Keep the loss and limitations prominent.
+- Research version 2 with walk-forward or leave-one-event-out validation,
+  executable value margins, uncertainty-aware sizing, and explicit no-trade
+  behavior. Do not merely lower 8.5% to another arbitrary number.
 
 Do not resurrect a rejected strategy merely to increase trade count. A no-trade
 decision is correct when the frozen event, model, surface, account, or clock gate

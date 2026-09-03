@@ -157,6 +157,15 @@ def _funnel() -> dict | None:
     return json.loads(path.read_text())
 
 
+@st.cache_data(show_spinner=False)
+def _final_result() -> dict | None:
+    """Load the reviewed, immutable result summary—not a runtime ledger."""
+    path = ROOT / "evidence" / "measured_result.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
 def _book():
     return Book(ROOT / "data" / "event_book.json")
 
@@ -246,6 +255,7 @@ except BookCorrupt as exc:
     book = None
     st.error(f"Position registry failed verification: {exc}")
 
+final_result = _final_result()
 equity = None
 positions = []
 if account_payload:
@@ -254,6 +264,11 @@ if account_payload:
 
 mode = _runtime_mode()
 phase, action, explanation = _phase(now, has_position=bool(positions))
+if final_result and final_result.get("broker_flat") and not positions:
+    phase, action, explanation = (
+        "COMPLETE", "FLAT",
+        "The scheduled exit filled and the paper broker confirms zero open exposure.",
+    )
 rehearsal = _latest(preflight, "rehearsal_summary")
 surface_row = _latest(preflight, "surface_diagnostic")
 semantic_rows = [row for row in preflight
@@ -298,7 +313,9 @@ m2.metric("Position", "FLAT" if not positions else f"{len(positions)} leg(s)")
 m3.metric(
     "Measured P&L",
     "Not started" if now < START else
-    f"${equity - 100_000:+,.2f}" if equity is not None else "Not published",
+    f"${equity - 100_000:+,.2f}" if equity is not None else
+    f"${final_result['realized_account_pnl_usd']:+,.2f}" if final_result else
+    "Not published",
 )
 m4.metric(
     "Evidence health",
@@ -310,6 +327,27 @@ m4.metric(
 tabs = st.tabs(["Overview", "Decision evidence", "Operations & audit"])
 
 with tabs[0]:
+    if final_result:
+        trade = final_result["trade"]
+        st.subheader("Final measured result")
+        st.error(
+            f"REALIZED LOSS — the account finished at "
+            f"${final_result['final_equity_usd']:,.2f}, or "
+            f"{final_result['account_return_pct']:+.2f}%. The agent is flat."
+        )
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Account return", f"{final_result['account_return_pct']:+.2f}%")
+        r2.metric("Trade return", f"{trade['structure_return_pct']:+.2f}%")
+        r3.metric("Capital deployed", f"${trade['premium_deployed_usd']:,.0f}",
+                  f"{trade['capital_deployed_pct']:.2f}% of account",
+                  delta_color="off")
+        r4.metric("Exit timing", "+18 seconds", "scheduled 09:45 ET",
+                  delta_color="off")
+        st.caption(
+            "13 Sep 4 $367.50 straddles · $29.60 entry debit · "
+            "$21.37 exit credit · paper-broker fills and final equity"
+        )
+
     st.subheader("How the weekly agent reached today's action")
     phase1, phase2, phase3, phase4 = st.columns(4)
     with phase1:
@@ -332,7 +370,17 @@ with tabs[0]:
     st.divider()
     st.subheader("What happens next")
     step1, step2, step3 = st.columns(3)
-    if positions:
+    if final_result and final_result.get("broker_flat"):
+        with step1:
+            st.markdown("#### 1 · Entered")
+            st.write("All frozen gates passed; 13 straddles filled at a $29.60 debit.")
+        with step2:
+            st.markdown("#### 2 · Exited")
+            st.write("The autonomous deadline exit filled at 09:45:18 ET; broker exposure is zero.")
+        with step3:
+            st.markdown("#### 3 · Learned")
+            st.write("The result was -10.70%. The evidence and failure analysis are published, not hidden.")
+    elif positions:
         with step1:
             st.markdown("#### 1 · Entered")
             st.write(f"Alpaca currently confirms {len(positions)} open option legs.")
@@ -379,6 +427,12 @@ with tabs[0]:
             "Unrealized P&L": row.get("unrealized_pl"),
         } for row in positions], hide_index=True, **STRETCH)
         st.caption("Live read-only broker state. Refreshes at most once per minute.")
+    elif final_result and final_result.get("broker_flat"):
+        st.info(
+            "FINALIZED — reviewed broker state confirms the account is flat. "
+            "The immutable measured result remains visible even when live "
+            "dashboard credentials are unavailable."
+        )
     elif account_error:
         st.warning(f"Live broker read unavailable: {account_error}")
     elif account_payload is not None:
@@ -430,7 +484,7 @@ with tabs[0]:
         else:
             st.info("No rehearsal surface was published.")
 
-    st.subheader("Why the entry was conditional" if positions
+    st.subheader("Evidence used before entry" if final_result or positions
                  else "Why this trade is still only conditional")
     h1, h2, h3 = st.columns(3)
     h1.metric("Historical gated sample", "6 events")
@@ -441,10 +495,19 @@ with tabs[0]:
     st.caption(
         "These are historical option-trade-bar proxies, not guaranteed returns "
         "or historical marketable fills. " + (
-            "The live gate passed; Alpaca now reports the resulting position above."
-            if positions else "The live gate decides whether to trade."
+            "The live gate passed; the measured result is reported above."
+            if final_result or positions else "The live gate decides whether to trade."
         )
     )
+
+    if final_result:
+        st.warning(
+            "Hindsight: the 8.05%-of-spot entry premium was below the frozen "
+            "8.5% ceiling but above every premium in the six-event accepted "
+            "historical sample. That exposed an extrapolation the aggregate "
+            "backtest did not make obvious. Version 2 requires an executable "
+            "value margin and uncertainty-aware sizing instead of a lone cap."
+        )
 
     with st.expander("Exact frozen rules"):
         st.markdown(
@@ -593,6 +656,21 @@ with tabs[2]:
         if rehearsal else "Not recorded"))
     o2.metric("Broker view", "Connected" if account_payload else "Private runtime")
     o3.metric("Open broker legs", len(positions))
+
+    if final_result:
+        st.success(
+            "Terminal state verified: scheduled exit filled, broker flat, "
+            f"final equity ${final_result['final_equity_usd']:,.2f}."
+        )
+        with st.expander("Post-exit defect and fix"):
+            st.write(
+                "After the clean exit, registry recovery briefly recreated a "
+                "phantom local row from the historical entry order. Broker-safe "
+                "close-only order intent prevented new exposure, but later cycles "
+                "kept attempting unnecessary closes. Recovery now treats any "
+                "completed event row as terminal, and a regression test proves a "
+                "closed trade cannot be resurrected."
+            )
 
     if account_error:
         st.warning(f"Broker read unavailable: {account_error}")

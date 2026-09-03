@@ -199,7 +199,12 @@ def _pending_exit_attempt(ledger: AuditLedger, entry_id: str) -> str | None:
 
 def _recover_entry(mcp: MCPClient, book: Book, ledger: AuditLedger,
                    now: dt.datetime) -> None:
-    if book.open_entries or not _entry_was_attempted(ledger):
+    # Recovery is only for a genuinely missing registry row. A completed entry
+    # remains in the book after it is closed; recreating it from the historical
+    # filled entry order would manufacture a phantom position after a clean
+    # exit and make every later cycle try to close an already-flat account.
+    if any(row.id.startswith(f"{POLICY.event_id}-") for row in book.entries) \
+            or not _entry_was_attempted(ledger):
         return
     intent = _latest_event(ledger, "entry_intent")
     try:

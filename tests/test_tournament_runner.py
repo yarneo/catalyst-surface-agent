@@ -295,6 +295,34 @@ def test_live_entry_records_actual_fill_before_next_cycle(
     assert "entry_booked" in types and "shadow_entry" not in types
 
 
+def test_closed_entry_is_not_recovered_as_a_phantom_position(
+        runner, tmp_path):
+    now = runner.POLICY.exit_at + dt.timedelta(minutes=1)
+    book = Book(tmp_path / "book.json")
+    book.add(BookEntry(
+        id=f"{runner.POLICY.event_id}-1", underlying="AVGO",
+        structure="long_straddle",
+        legs=[{"symbol": "AVGO260904C00367500", "side": "buy", "ratio_qty": 1},
+              {"symbol": "AVGO260904P00367500", "side": "buy", "ratio_qty": 1}],
+        qty=13, entry=29.6, max_profit=59.2, max_loss=29.6,
+        opened_at="2026-09-02T15:30:00-04:00",
+        closed_at="2026-09-03T09:45:00-04:00", exit=-21.37,
+        close_reason="scheduled exit"))
+    ledger = AuditLedger(tmp_path / "evidence.jsonl")
+    ledger.append("entry_intent", {
+        "legs": book.entries[0].legs, "debit": 29.6,
+        "max_profit": 59.2, "max_loss": 29.6,
+    }, recorded_at=now - dt.timedelta(days=1))
+
+    class FilledEntryOrder:
+        def order_by_client_id(self, coid):
+            raise AssertionError("closed entry must not query its old order")
+
+    runner._recover_entry(FilledEntryOrder(), book, ledger, now)
+    assert len(book.entries) == 1
+    assert not book.open_entries
+
+
 def test_latest_stock_trade_must_be_fresh(runner):
     old = dt.datetime(2026, 9, 2, 15, 20, tzinfo=ET)
     now = dt.datetime(2026, 9, 2, 15, 30, tzinfo=ET)

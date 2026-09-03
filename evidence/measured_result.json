@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "status": "realized",
+  "as_of": "2026-09-03T16:57:15-04:00",
+  "starting_equity_usd": 100000.0,
+  "final_equity_usd": 89299.3,
+  "realized_account_pnl_usd": -10700.7,
+  "account_return_pct": -10.7007,
+  "broker_flat": true,
+  "trade": {
+    "underlying": "AVGO",
+    "structure": "near-ATM long straddle",
+    "expiry": "2026-09-04",
+    "strike": 367.5,
+    "quantity": 13,
+    "entry_at": "2026-09-02T15:26:54-04:00",
+    "entry_debit_per_share_usd": 29.6,
+    "premium_deployed_usd": 38480.0,
+    "capital_deployed_pct": 38.48,
+    "scheduled_exit_at": "2026-09-03T09:45:00-04:00",
+    "filled_exit_at": "2026-09-03T09:45:17.894868-04:00",
+    "exit_credit_per_share_usd": 21.37,
+    "gross_trade_pnl_usd": -10699.0,
+    "structure_return_pct": -27.804054
+  },
+  "fees_and_adjustments_usd": -1.7,
+  "method": "Paper-broker fills and final account equity; no account or order identifiers are published.",
+  "limitations": [
+    "One realized event does not establish or disprove a durable edge.",
+    "Historical evidence used option trade-bar proxies rather than executable historical NBBO fills.",
+    "The accepted historical sample contained six gated events and no accepted premium as high as the realized entry's 8.05% of spot."
+  ]
+}

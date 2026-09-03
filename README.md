@@ -7,6 +7,19 @@ reconciliation, and a tamper-evident result ledger.
 
 [Open the live dashboard](https://catalyst-surface-agent.streamlit.app/)
 
+## Measured result
+
+The autonomous deployment completed its full lifecycle and finished flat at the
+broker. It bought 13 AVGO Sep 4 $367.50 straddles for a $29.60 combined debit
+and exited at 09:45:18 ET the next session for a $21.37 credit. Final paper
+equity was **$89,299.30: -$10,700.70, or -10.70%**. The result was poor; it is
+published without relabeling or cherry-picking.
+
+Read the [one-page overview](docs/ONE_PAGE_OVERVIEW.md),
+[three-minute narration](docs/DEMO_NARRATION.md), and
+[full postmortem](docs/FINAL_POSTMORTEM.md). The exact credential-free numbers
+are in [`evidence/measured_result.json`](evidence/measured_result.json).
+
 Catalyst Surface Agent is one reusable agent with two time-separated phases.
 Weekly intelligence discovers scheduled events, verifies independent calendar
 and semantic evidence, replays each candidate's historical options, applies a
@@ -14,17 +27,18 @@ frozen promotion rule, and seals the resulting plan. Autonomous execution then
 consumes that plan, repeats every mutable live-market gate, allocates exact
 maximum-loss risk, trades, reconciles, and exits on the market's clock.
 
-For the current measured week, the process selected one conditional AVGO
+For the measured deployment, the process selected one conditional AVGO
 earnings straddle. AVGO is the content of this week's sealed plan—not a second
 bot or permanent ticker rule. A subsequent plan may contain other qualified
 events or no trade at all. Broader news-continuation, macro, and peer-spillover
 ideas remain disabled or shadow-only because their timestamped replays did not
 justify orders.
 
-The current plan caps exact maximum loss at 40% of equity. The Aug 30 sizing
+The completed plan capped exact maximum loss at 40% of equity. The Aug 30 sizing
 review chose that ceiling because the deliberately adverse six-event replay's
 empirical log-growth optimum was 38.1%; 50% increased tail loss and reduced the
-conservative sample's geometric growth. Model confidence cannot change it.
+conservative sample's geometric growth. The realized -10.70% account return
+showed that this was too much confidence to place in a small proxy sample.
 
 ## What makes it different
 
@@ -110,7 +124,7 @@ scanner survives as audited discovery; the ranking has no order authority.
 `scan_event_premium_book.py` and `classify_event_premium_candidates.py` contain
 no order flag and construct no order.
 
-## Current sealed plan
+## Completed sealed plan
 
 1. Observe the Broadcom earnings event selected before measurement.
 2. During the configured pre-close window, select the closest common-strike
@@ -122,6 +136,11 @@ no order flag and construct no order.
    of current equity.
 5. Hold through the release and begin the exit at 09:45 ET the next session.
    A later emergency flatten is independent of model availability.
+
+All five stages ran. The entry filled, the fixed exit filled 18 seconds after
+its target, and the broker finished flat. The postmortem replaces the frozen
+gate with a stricter version-2 hypothesis; it does not retroactively alter this
+measured decision.
 
 The timestamps and event identity currently live in
 [`scheduled.py`](src/trading_bot/tournament/scheduled.py). They are configuration
