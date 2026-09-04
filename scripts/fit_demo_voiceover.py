@@ -54,7 +54,7 @@ def audio_filter(ranges: list[tuple[float, float]]) -> str:
     return ";".join([*pieces, joined])
 
 
-def render(source: Path, output: Path) -> dict:
+def render(source: Path, output: Path, tempo: float = 1.08) -> dict:
     for tool in ("ffmpeg", "ffprobe"):
         if not shutil.which(tool):
             raise SystemExit(f"missing required tool: {tool}")
@@ -81,7 +81,9 @@ def render(source: Path, output: Path) -> dict:
             "-filter_complex", audio_filter(ranges), "-map", "[out]",
             "-c:a", "pcm_s24le", str(audio_path),
         ])
-        seconds = duration(audio_path)
+        # The entire voice track is accelerated later, so keep each slide cut
+        # aligned to the same sentence after the tempo change.
+        seconds = duration(audio_path) / tempo
         run([
             "ffmpeg", "-loglevel", "error", "-y", "-loop", "1",
             "-framerate", "30", "-i", str(image_path),
@@ -111,15 +113,19 @@ def render(source: Path, output: Path) -> dict:
         "-i", str(concat), "-c", "copy", "-movflags", "+faststart",
         str(raw_video),
     ])
-    # Keep the voice as one continuous recording. One gentle, global cleanup
-    # avoids the loudness jumps and room-noise pumping caused by processing each
-    # slide independently. The denoiser is intentionally conservative.
+    # Keep the voice as one continuous recording. The narrow cuts below target
+    # the measured room/fan resonances without the watery pumping a broadband
+    # denoiser can add. atempo tightens the read while preserving vocal pitch.
     run([
         "ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
         "-i", str(audio_concat), "-i", str(raw_video),
         "-map", "1:v:0", "-map", "0:a:0", "-c:v", "copy",
         "-af", (
-            "highpass=f=70,afftdn=nr=6:nf=-45,"
+            "highpass=f=75,"
+            "equalizer=f=73:t=q:w=8:g=-15,"
+            "equalizer=f=118:t=q:w=12:g=-14,"
+            "equalizer=f=273:t=q:w=14:g=-12,"
+            f"atempo={tempo:.4f},"
             "loudnorm=I=-16:LRA=7:TP=-1.5,aresample=48000"
         ),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
@@ -131,6 +137,7 @@ def render(source: Path, output: Path) -> dict:
         "source": str(source),
         "duration_seconds": round(duration(output), 3),
         "resolution": "1920x1080",
+        "tempo": tempo,
         "scenes": timeline,
     }
     manifest = output.with_suffix(".json")
@@ -145,10 +152,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output", type=Path,
         default=ROOT / "reports" / "catalyst_surface_agent_final.mp4")
+    parser.add_argument(
+        "--tempo", type=float, default=1.08,
+        help="Narration speed multiplier; pitch is preserved (default: 1.08)")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    print(json.dumps(render(args.voiceover.resolve(), args.output.resolve()),
-                     indent=2))
+    if not 0.5 <= args.tempo <= 2.0:
+        raise SystemExit("--tempo must be between 0.5 and 2.0")
+    print(json.dumps(render(
+        args.voiceover.resolve(), args.output.resolve(), args.tempo), indent=2))
