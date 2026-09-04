@@ -26,8 +26,10 @@ CUTS = [
     [(96.75, 125.35)],
     [(125.35, 152.35)],
     [(152.35, 185.55)],
-    [(187.10, 190.85), (195.65, 218.30)],
-    [(221.30, 255.58)],
+    # Both joins sit inside room tone. This avoids clipping the start of either
+    # discarded false start into the finished narration.
+    [(187.10, 191.12), (195.20, 217.20)],
+    [(221.05, 255.58)],
 ]
 
 
@@ -48,9 +50,9 @@ def audio_filter(ranges: list[tuple[float, float]]) -> str:
     if len(labels) == 1:
         joined = f"{labels[0]}anull[out]"
     else:
-        # The only multi-range scene removes a spoken false start. A tiny
-        # crossfade avoids a waveform click without creating an audible echo.
-        joined = f"{labels[0]}{labels[1]}acrossfade=d=0.05:c1=tri:c2=tri[out]"
+        # The only multi-range scene removes a spoken false start. Both pieces
+        # now include clean room tone, allowing a longer inaudible crossfade.
+        joined = f"{labels[0]}{labels[1]}acrossfade=d=0.20:c1=tri:c2=tri[out]"
     return ";".join([*pieces, joined])
 
 
