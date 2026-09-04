@@ -113,18 +113,25 @@ def render(source: Path, output: Path, tempo: float = 1.08) -> dict:
         "-i", str(concat), "-c", "copy", "-movflags", "+faststart",
         str(raw_video),
     ])
-    # Keep the voice as one continuous recording. The narrow cuts below target
-    # the measured room/fan resonances without the watery pumping a broadband
-    # denoiser can add. atempo tightens the read while preserving vocal pitch.
+    # Keep the voice as one continuous recording. The first 350 ms are room
+    # tone, so afftdn learns that exact broadband noise profile before speech
+    # begins. Narrow cuts remove the measured resonances, while the gentle gate
+    # lowers the remaining room tone only between phrases. atempo tightens the
+    # read while preserving vocal pitch.
     run([
         "ffmpeg", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0",
         "-i", str(audio_concat), "-i", str(raw_video),
         "-map", "1:v:0", "-map", "0:a:0", "-c:v", "copy",
         "-af", (
+            "asendcmd=0.0 afftdn sn start,"
+            "asendcmd=0.35 afftdn sn stop,"
+            "afftdn=nr=14:nf=-50:nt=custom:gs=8,"
             "highpass=f=75,"
             "equalizer=f=73:t=q:w=8:g=-15,"
             "equalizer=f=118:t=q:w=12:g=-14,"
             "equalizer=f=273:t=q:w=14:g=-12,"
+            "agate=threshold=0.006:ratio=2.5:range=0.18:"
+            "attack=12:release=180:knee=3,"
             f"atempo={tempo:.4f},"
             "loudnorm=I=-16:LRA=7:TP=-1.5,aresample=48000"
         ),
