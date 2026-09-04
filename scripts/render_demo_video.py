@@ -416,15 +416,11 @@ def render(output: Path, *, voice: str, rate: int, keep_build: bool) -> None:
         run(["say", "-v", voice, "-r", str(rate), "-f", str(text_path),
              "-o", str(audio_path)])
         seconds = duration(audio_path) + 0.5
-        frames = max(1, round(seconds * 30))
         run([
             "ffmpeg", "-loglevel", "error", "-y",
             "-loop", "1", "-i", str(image_path), "-i", str(audio_path),
             "-filter_complex",
-            (f"[0:v]scale=1980:1114,zoompan="
-             f"z='min(zoom+0.00010,1.025)':"
-             f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-             f"d={frames}:s=1920x1080:fps=30,format=yuv420p[v];"
+            (f"[0:v]fps=30,format=yuv420p[v];"
              f"[1:a]highpass=f=80,lowpass=f=12000,"
              f"loudnorm=I=-16:LRA=7:TP=-1.5,apad=pad_dur=0.5[a]"),
             "-map", "[v]", "-map", "[a]", "-t", f"{seconds:.3f}",
