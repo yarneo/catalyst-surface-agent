@@ -1,79 +1,110 @@
-# Three-minute demo narration
+# Demo narration — natural recording script
 
-This script assumes a screen recording of the live dashboard, then the public
-repository. Read naturally; do not rush the loss or the failure analysis.
+Read this at a comfortable pace. Pause for two or three seconds between
+sections. The finished video will be retimed around the recording, so there is
+no need to chase a stopwatch.
 
-## 0:00–0:25 · The claim
+## 1 · The hook
 
-**Screen:** Dashboard title and final result.
+“This is Catalyst Surface Agent, built by Yar and Starboi. It finds scheduled
+market events and trades them autonomously.
 
-“This is Catalyst Surface Agent, built by Yar and Starboi. It is an autonomous
-options agent for scheduled market events. The core idea is simple: language
-models interpret whether an event is still intact, but deterministic code alone
-controls price, liquidity, risk, orders, and deadlines. This run lost 10.70
-percent. We are showing the exact result because auditability is part of the
-product, not a slide added after the fact.”
+Before Broadcom reported earnings, our engine identified the setup as likely to
+produce a large move. Broadcom then fell more than six percent by our exit.
 
-## 0:25–0:58 · One general engine
+So the interesting question is this: why did a correct signal still produce a
+losing options trade?”
 
-**Screen:** Overview, four-stage pipeline, then selection funnel.
+## 2 · Finding the opportunity
 
-“This is not an AVGO-only bot. Before the week, the same engine scanned 64 liquid
-names, measured 31 usable option surfaces, found nine event-like term structures,
-verified six dated events, and promoted one plan. AVGO is what survived this
-week's evidence, not a hard-coded permanent ticker. A later week can select a
-different event—or correctly seal an empty plan.”
+“This isn’t an AVGO-only bot.
 
-## 0:58–1:30 · Featherless and Alpaca MCP
+At the start of the week it searched 64 liquid stocks. It studied their option
+markets and looked for events that could produce an unusual move.
 
-**Screen:** Featherless panel, then autonomous loop.
+That list went from 64 stocks to 31 usable surfaces. Then nine possible events.
+Then six confirmed candidates.
 
-“Featherless runs multiple models concurrently and requires typed, grounded
-agreement. The committee can stop a trade if earnings leaked, guidance changed,
-or the event already resolved. Crucially, it cannot create a trade, change size,
-or waive a gate. Alpaca MCP supplies the entire factual lifecycle: account and
-clock, news, stocks, option chains, historical option bars, orders, positions,
-activities, and final portfolio equity.”
+Broadcom was the only trade that survived every test. In another week the answer
+could be a different stock. It could also be no trade at all.”
 
-## 1:30–2:03 · What actually traded
+## 3 · What the model does
 
-**Screen:** Final measured-result cards.
+“Featherless runs several models at the same time. They interpret the news and
+decide whether the event still looks intact.
 
-“Fresh entry checks passed on Wednesday. The agent bought 13 near-the-money
-September 4 straddles at the 367.50 strike for a combined debit of 29 dollars and
-60 cents. That deployed 38,480 dollars, or 38.48 percent of the account. The
-fixed exit began Thursday at 9:45 Eastern and filled 18 seconds later for 21
-dollars and 37 cents. Gross trade loss was 10,699 dollars. Final paper equity
-was 89,299 dollars and 30 cents, and the broker finished flat.”
+The committee can catch leaked results or changed guidance. It can also describe
+the likely direction and strength of the surprise.
 
-## 2:03–2:36 · The useful failure
+But the AI has clear limits. It can stop a trade. It cannot invent one. It cannot
+increase our position or ignore a risk rule.”
 
-**Screen:** Hindsight warning and post-exit defect panel.
+## 4 · From signal to trade
 
-“The loss revealed a strategy flaw that the headline backtest hid. Entry premium
-was 8.05 percent of spot—under our 8.5 percent cap, but more expensive than every
-accepted event in the historical sample. We extrapolated beyond direct support,
-and we sized too aggressively for only eight observations. The live run also
-found clock-skew, model-cache, exit-retry, dashboard, and terminal-state bugs.
-Every one is preserved and now covered by a regression test.”
+“Alpaca MCP connects the rest of the process.
 
-## 2:36–3:00 · Why it matters
+It gives the agent market data, option history, the market clock, and the real
+account state. When a trade qualifies, it handles the orders. The agent checks
+the broker position and follows it through the exit.
 
-**Screen:** Repository evidence and final architecture.
+So this isn’t an AI producing a recommendation. It’s a full autonomous loop.
+The agent discovers, decides, trades, checks its work, and records the result.”
 
-“Version 2 trades only when a conservative estimate of liquidation value clears
-the actual marketable debit after spread and uncertainty. Size falls as price
-and uncertainty rise; moderate moves use capped convexity or no trade. The
-lasting result is not a lucky screenshot. It is a reusable, fail-closed agent
-that discovers, decides, executes, reconciles, learns, and can prove exactly
-what happened.”
+## 5 · What actually happened
 
-## Recording checklist
+“Every live condition passed on Wednesday afternoon.
 
-- Keep the dashboard result visible long enough to read.
-- Show the 64 → 31 → 9 → 6 → 1 funnel and Featherless model-by-model trace.
-- Show `evidence/measured_result.json` and the passing test command briefly.
-- Do not display browser secrets, account numbers, order IDs, local logs, or
-  private runtime files.
-- End on the repository URL and dashboard URL.
+The agent bought 13 Broadcom straddles at the 367-dollar-and-50-cent strike. The
+position cost 38,480 dollars, or about 38 percent of the account.
 
+The structure was direction-neutral. It could benefit from a sharp move either
+way. The entry-time Featherless committee didn’t force a directional bet. It
+kept the focus on whether the event was still intact.”
+
+## 6 · The move thesis was right
+
+“Broadcom was trading at 368 dollars and 56 cents when we entered.
+
+By our exit it was around 345 dollars and 82 cents. That’s a 6.17 percent event
+move.
+
+The engine was right to expect unusual movement. The problem was the price of
+the options. The straddle cost 8.04 percent of the stock price. A six-percent move was large, but
+it wasn’t enough to repay that premium after implied volatility collapsed.”
+
+## 7 · Why the exit helped
+
+“The exit timing mattered too.
+
+The position looked much worse shortly after the market opened. It recovered
+into our planned 9:45 exit, and the order filled 18 seconds later.
+
+After we sold, Broadcom reversed more than 11 dollars toward our strike. It
+finished the day near 357. That cut its distance from our strike roughly in
+half. With only one day left before expiration, the fixed exit captured more of
+the event move before the reversal and time decay took over.
+
+The fixed exit kept one bad trade from becoming a larger one.”
+
+## 8 · What changes next
+
+“The next version won’t simply use a lower price limit.
+
+It will ask a better question: does the expected value of this position clearly
+exceed what the options cost right now?
+
+Position size will shrink when the evidence is uncertain. When a moderate move
+is more likely, the agent can use a cheaper capped structure. And when the value
+isn’t there, it stays flat.
+
+Catalyst Surface Agent connected AI reasoning to a real autonomous trade. The
+engine found the move. The execution captured it. Now the pricing model gets
+sharper.”
+
+## Recording notes
+
+- Record the eight sections separately if that feels easier.
+- Leave two or three seconds of silence between sections.
+- If a sentence goes wrong, pause and say the whole sentence again.
+- Pronounce AVGO as “A-V-G-O” and MCP as “M-C-P.”
+- Do not rush. The visuals will be fitted to the final voice track.

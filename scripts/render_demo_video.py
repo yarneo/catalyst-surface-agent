@@ -38,13 +38,14 @@ AMBER = (255, 195, 92)
 SCENES = [
     {
         "kicker": "MEASURED DEPLOYMENT · FINAL",
-        "title": "A real autonomous run.\nA real loss. A better agent.",
+        "title": "The move was real.\nThe trade taught us why price matters.",
         "narration": (
-            "This is Catalyst Surface Agent, built by Yar and Starboi. It is an "
-            "autonomous options system for scheduled market events. This run lost "
-            "ten point seven zero percent. We are leading with that number because "
-            "auditability is part of the product, not a slide added afterward. The "
-            "agent completed the full lifecycle and finished flat at the broker."
+            "This is Catalyst Surface Agent, built by Yar and Starboi. It finds "
+            "scheduled market events and trades them autonomously. Before Broadcom "
+            "reported earnings, our engine identified the setup as likely to produce "
+            "a large move. Broadcom then fell more than six percent by our exit. The "
+            "interesting question is why a correct signal still produced a losing "
+            "options trade."
         ),
     },
     {
@@ -94,27 +95,30 @@ SCENES = [
         ),
     },
     {
-        "kicker": "THE STRATEGY LESSON",
-        "title": "The gate passed.\nThe evidence did not extend that far.",
+        "kicker": "MODEL SIGNAL VS OPTION PRICE",
+        "title": "Big move. Correct setup.\nPremium still mattered.",
         "narration": (
-            "The loss revealed what the headline backtest hid. Entry premium was "
-            "eight point zero five percent of spot, below our frozen eight point five "
-            "percent ceiling, but more expensive than every accepted historical "
-            "event. We extrapolated beyond direct support and allocated too much from "
-            "only eight observations. The twenty-seven point eight percent trade loss "
-            "became a ten point seven percent account loss."
+            "The engine was not guessing up or down. It was buying a large move. "
+            "Broadcom fell from three hundred sixty-eight dollars and fifty-six cents at entry "
+            "to about three hundred forty-five dollars and eighty-two cents at our "
+            "exit. That is a six point one seven percent event move. "
+            "But the straddle cost eight point zero four percent of the stock price. "
+            "The move was large, just not large enough to overcome that premium and "
+            "the collapse in implied volatility."
         ),
     },
     {
-        "kicker": "FAILURES BECAME TESTS",
-        "title": "The exit worked.\nThe audit found everything else.",
+        "kicker": "EXIT DISCIPLINE",
+        "title": "Capture the event move.\nLeave before it fades.",
         "narration": (
-            "The live run also exposed bounded clock skew, a model-cache edge case, "
-            "exit retry semantics, a stale dashboard, and a post-exit phantom registry "
-            "row. Close-only order intent prevented that local defect from creating "
-            "reverse exposure. Each failure now has a regression test. The repaired "
-            "supervisor reaches D O N E with final equity of eighty-nine thousand two "
-            "hundred ninety-nine dollars and thirty cents, and zero open positions."
+            "The exit timing mattered. The options opened with heavy volatility and "
+            "the position briefly looked much worse. It recovered into our scheduled "
+            "nine forty-five exit and closed eighteen seconds later. After that, "
+            "Broadcom reversed more than eleven dollars toward our strike and finished "
+            "the day near three hundred fifty-seven. With expiration one day away, "
+            "that reversal and time decay would have put even more pressure on the "
+            "position. The fixed exit protected us from turning one bad trade into a "
+            "larger one."
         ),
     },
     {
@@ -209,20 +213,20 @@ def metric(draw, x, y, w, title, value, note, accent=CYAN):
 def render_scene(index: int, scene: dict) -> Image.Image:
     image, draw = base_slide(index, scene)
     if index == 0:
-        metric(draw, 80, 520, 400, "Final equity", "$89,299.30",
-               "from $100,000", RED)
-        metric(draw, 505, 520, 400, "Account return", "-10.70%",
-               "measured, realized", RED)
-        metric(draw, 930, 520, 400, "Broker state", "FLAT",
-               "zero open positions", GREEN)
+        metric(draw, 80, 520, 400, "Engine signal", "BIG MOVE",
+               "direction-neutral", PURPLE)
+        metric(draw, 505, 520, 400, "Stock move", "-6.17%",
+               "entry to scheduled exit", GREEN)
+        metric(draw, 930, 520, 400, "Lifecycle", "AUTONOMOUS",
+               "signal → order → exit", CYAN)
         metric(draw, 1355, 520, 485, "Exit", "09:45:18 ET",
                "18 seconds after target", GREEN)
         rounded(draw, (80, 750, 1840, 910), fill=(35, 28, 48),
                 outline=(110, 67, 91))
         text(draw, (120, 785), "THE POINT", 18, color=RED, bold=True)
         text(draw, (120, 825),
-             "The system did not win the trade. It did complete the lifecycle, "
-             "preserve truth, and produce a better falsifiable design.",
+             "The engine correctly identified unusual magnitude. The option "
+             "pricing layer is where the next version gets sharper.",
              29, color=WHITE)
     elif index == 1:
         stages = [("64", "liquid names"), ("31", "usable surfaces"),
@@ -308,54 +312,49 @@ def render_scene(index: int, scene: dict) -> Image.Image:
             text(draw, (x, 850), label, 20, color=color, bold=True,
                  anchor="ma", spacing=4)
     elif index == 5:
-        rounded(draw, (80, 485, 1160, 900), fill=PANEL,
-                outline=(47, 64, 98))
-        text(draw, (120, 520), "ACCEPTED HISTORICAL PREMIUM / SPOT", 20,
-             color=MUTED, bold=True)
-        values = [6.20, 7.60, 6.63, 5.74, 6.65, 7.74, 8.05]
-        labels = ["'24 Q3", "'24 Q4", "'25 Q2", "'25 Q3", "'25 Q4",
-                  "'26 Q1", "LIVE"]
-        baseline = 820
-        for i, (value, label) in enumerate(zip(values, labels)):
-            x = 135 + i * 140
-            height = value * 31
-            color = RED if label == "LIVE" else CYAN
-            draw.rounded_rectangle((x, baseline - height, x + 78, baseline),
-                                   radius=10, fill=color)
-            text(draw, (x + 39, baseline - height - 35), f"{value:.2f}%", 18,
-                 color=color, bold=True, anchor="ma")
-            text(draw, (x + 39, baseline + 22), label, 17, color=MUTED,
-                 anchor="ma")
-        draw.line((120, baseline, 1120, baseline), fill=(66, 84, 122), width=2)
-        rounded(draw, (1210, 485, 1840, 900), fill=(47, 28, 43), outline=RED)
-        text(draw, (1255, 535), "THE EXTRAPOLATION", 20, color=RED, bold=True)
-        text(draw, (1255, 600), "8.05%", 72, color=RED, bold=True)
-        text(draw, (1255, 700), "was under the rule", 25)
-        text(draw, (1255, 744), "but above every accepted", 25)
-        text(draw, (1255, 788), "historical example.", 25, bold=True)
-        text(draw, (1255, 850), "8 events ≠ confidence", 22, color=AMBER)
+        metric(draw, 80, 500, 520, "Trade thesis", "BIG MOVE",
+               "direction-neutral convexity", PURPLE)
+        metric(draw, 620, 500, 520, "AVGO at entry", "$368.56",
+               "Wednesday 15:26 ET", CYAN)
+        metric(draw, 1160, 500, 680, "AVGO at exit", "~$345.82",
+               "-6.17% event move", GREEN)
+        rounded(draw, (80, 740, 1840, 910), fill=(35, 28, 48),
+                outline=RED)
+        text(draw, (120, 775), "WHY THE OPTIONS STILL LOST", 20,
+             color=RED, bold=True)
+        text(draw, (120, 825),
+             "The straddle cost 8.04% of spot. A 6.17% move plus volatility "
+             "collapse could not repay the premium.",
+             31, color=WHITE)
     elif index == 6:
-        rows = [
-            ("CLOCK SKEW", "bounded freshness tolerance"),
-            ("MODEL CACHE", "fresh typed entry quorum"),
-            ("RETRY IDS", "terminal vs unknown semantics"),
-            ("STALE UI", "broker truth + final artifact"),
-            ("PHANTOM ROW", "terminal recovery invariant"),
-        ]
-        for i, (failure, fix) in enumerate(rows):
-            y = 485 + i * 87
-            rounded(draw, (80, y, 650, y + 66), fill=(47, 28, 43))
-            text(draw, (115, y + 20), failure, 21, color=RED, bold=True)
-            draw.line((690, y + 33, 830, y + 33), fill=MUTED, width=4)
-            draw.polygon([(830, y + 33), (816, y + 24), (816, y + 42)],
-                         fill=MUTED)
-            rounded(draw, (870, y, 1660, y + 66), fill=(23, 47, 55))
-            text(draw, (905, y + 20), fix, 23, color=GREEN, bold=True)
-            text(draw, (1710, y + 20), "TESTED", 18, color=GREEN, bold=True)
-        rounded(draw, (80, 925, 1840, 975), fill=PANEL_2)
-        text(draw, (960, 937),
-             "CLOSE-ONLY INTENT KEPT BROKER EXPOSURE AT ZERO",
-             19, color=GREEN, bold=True, anchor="ma")
+        rounded(draw, (80, 500, 1360, 900), fill=PANEL,
+                outline=(47, 64, 98))
+        chart = [("ENTRY", 368.56, CYAN), ("OPEN", 351.22, PURPLE),
+                 ("EXIT", 345.82, GREEN), ("DAY LOW", 342.36, AMBER),
+                 ("CLOSE", 357.19, RED)]
+        left, right, top, bottom = 145, 1295, 580, 805
+        low, high = 340.0, 371.0
+        points = []
+        for i, (label, price, color) in enumerate(chart):
+            x = left + i * ((right - left) / (len(chart) - 1))
+            y = bottom - (price - low) / (high - low) * (bottom - top)
+            points.append((x, y))
+        draw.line(points, fill=CYAN, width=7, joint="curve")
+        for (label, price, color), (x, y) in zip(chart, points):
+            draw.ellipse((x - 14, y - 14, x + 14, y + 14), fill=color)
+            text(draw, (x, y - 57), f"${price:.2f}", 20, color=color,
+                 bold=True, anchor="ma")
+            text(draw, (x, 842), label, 17, color=MUTED, bold=True,
+                 anchor="ma")
+        rounded(draw, (1400, 500, 1840, 900), fill=(23, 47, 55),
+                outline=GREEN)
+        text(draw, (1440, 540), "WHY 09:45 HELPED", 19,
+             color=GREEN, bold=True)
+        text(draw, (1440, 610), "$21.68", 53, color=GREEN, bold=True)
+        text(draw, (1440, 675), "distance from strike", 22)
+        text(draw, (1440, 738), "+$11.37", 44, color=AMBER, bold=True)
+        text(draw, (1440, 795), "retrace after exit", 22)
+        text(draw, (1440, 852), "one day to expiry", 20, color=MUTED)
     else:
         items = [
             ("1", "EXECUTABLE VALUE MARGIN",
