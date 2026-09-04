@@ -24,4 +24,4 @@ build-backend = "hatchling.build"
 packages = ["src/trading_bot"]
 
 [dependency-groups]
-dev = ["pytest>=9.1.1"]
+dev = ["pytest>=9.1.1", "reportlab>=5.0.1"]

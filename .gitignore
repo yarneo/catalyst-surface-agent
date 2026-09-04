@@ -13,5 +13,7 @@ __pycache__/
 data/
 logs/
 reports/
+output/
+tmp/
 *.bak
 *.tmp
