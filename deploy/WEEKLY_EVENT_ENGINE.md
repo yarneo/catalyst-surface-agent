@@ -9,9 +9,10 @@ audited execution phase runs that plan without strategy drift.
 Each week the same agent can autonomously:
 
 1. Scan the declared 64-name liquid universe for earnings in the active window.
-2. Require Yahoo Finance and Nasdaq to agree on ticker, date, and before-open or
-   after-close session. One provider cannot manufacture a quorum; any conflict
-   fails closed.
+2. Require Yahoo Finance and Nasdaq to agree on ticker and date, plus an
+   explicit before-open or after-close timestamp from at least one source. Any
+   date or session conflict fails closed; an unknown session from every source
+   cannot qualify.
 3. Use the Alpaca MCP exchange calendar and listed contracts to select the
    actual entry session, next-session exit, and first viable expiry. Weekends
    and market holidays are not inferred from weekdays.
@@ -32,9 +33,9 @@ Each week the same agent can autonomously:
    aggregate budget with a 20% per-event cap, weighted by the weakest replay
    statistic.
 8. Manage every event on its own clock with stable client order IDs, durable
-   book reconciliation, timeout recovery, next-session exit, and global
-   deadline flatten. A stale plan is automatically rolled by whole weeks while
-   preserving its cutoff convention.
+   book reconciliation, bounded MCP-startup retry, next-session exit, and
+   global deadline flatten. A stale plan is automatically rolled by whole weeks
+   while preserving its cutoff convention.
 
 The weekend planning surface is diagnostic, because a closed-market width is
 not an executable entry quote. It never waives the surface rule: the executor
@@ -77,6 +78,8 @@ weekly plans.
 - Featherless classifies supplied evidence and is non-expansive by construction.
 - A prequalified plan has `order_enabled=false`, is SHA-256 sealed, and carries
   no order authority. Editing it invalidates the digest.
+- Every planner run archives its complete sealed candidate record and writes a
+  compact candidate diagnosis to the hash-chained evidence ledger.
 - A strategy passing these rules can still lose money. The rules bound loss and
   reduce discretionary overfitting; they do not guarantee P&L.
 

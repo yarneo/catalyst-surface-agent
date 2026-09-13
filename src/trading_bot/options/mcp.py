@@ -44,6 +44,9 @@ class MCPClient:
     live: bool = False              # order placement requires an explicit opt-in
     paper: bool = True
     timeout: float = 60.0
+    startup_attempts: int = 3
+    startup_timeout: float = 30.0
+    startup_backoff: float = 1.0
     _proc: Any = field(default=None, repr=False)
     _id: int = field(default=0, repr=False)
     _lock: Any = field(default_factory=threading.Lock, repr=False)
@@ -52,6 +55,22 @@ class MCPClient:
     # ------------------------------------------------------------ lifecycle
 
     def start(self) -> "MCPClient":
+        if self.startup_attempts < 1:
+            raise ValueError("startup_attempts must be positive")
+        last_error: Exception | None = None
+        for attempt in range(1, self.startup_attempts + 1):
+            try:
+                return self._start_once()
+            except Exception as exc:  # noqa: BLE001 — startup is safe to retry
+                last_error = exc
+                self.stop()
+                if attempt < self.startup_attempts:
+                    time.sleep(self.startup_backoff * attempt)
+        raise MCPError(
+            f"initialize failed after {self.startup_attempts} attempts: "
+            f"{last_error}") from last_error
+
+    def _start_once(self) -> "MCPClient":
         env = dict(os.environ)
         env["ALPACA_API_KEY"] = self.api_key
         env["ALPACA_SECRET_KEY"] = self.secret_key
@@ -67,9 +86,14 @@ class MCPClient:
             env=env, text=True, bufsize=1)
         self._drain_stdout()
         self._drain_stderr()
-        init = self._rpc("initialize", {
-            "protocolVersion": "2024-11-05", "capabilities": {},
-            "clientInfo": {"name": "vrp-agent", "version": "1.0"}})
+        normal_timeout = self.timeout
+        self.timeout = min(self.timeout, self.startup_timeout)
+        try:
+            init = self._rpc("initialize", {
+                "protocolVersion": "2024-11-05", "capabilities": {},
+                "clientInfo": {"name": "vrp-agent", "version": "1.0"}})
+        finally:
+            self.timeout = normal_timeout
         self._notify("notifications/initialized", {})
         self.server_info = init.get("serverInfo", {})
         return self
@@ -128,13 +152,18 @@ class MCPClient:
     def stop(self) -> None:
         if self._proc:
             proc = self._proc
-            proc.terminate()
             try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5)
-            self._proc = None
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+            except (OSError, ProcessLookupError):
+                pass
+            finally:
+                self._proc = None
+                self._stdout_queue = None
 
     def __enter__(self): return self.start()
     def __exit__(self, *_): self.stop()

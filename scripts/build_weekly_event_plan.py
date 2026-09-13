@@ -30,6 +30,7 @@ from trading_bot.tournament.event_calendar import (  # noqa: E402
     alpaca_news_facts,
     calendar_catalyst_fact,
     discover_earnings_calendar,
+    news_schedule_facts,
 )
 from trading_bot.tournament.event_replay import (  # noqa: E402
     historical_earnings_events,
@@ -172,25 +173,41 @@ def build_plan(
     discovery = discover_earnings_calendar(
         window.start.date(), window.deadline.date(),
         minimum_market_cap=minimum_market_cap, universe=symbols)
-    consensuses = calendar_consensus(discovery.facts)
+    # First establish a date quorum. Some providers publish the date but omit
+    # the before/after-market session. Only those date-confirmed candidates are
+    # eligible for bounded broker-news enrichment.
+    initial_consensuses = calendar_consensus(discovery.facts)
     facts_by_symbol: dict[str, list[Any]] = {}
     news_counts: dict[str, int] = {}
-    for consensus in consensuses:
-        if not consensus.confirmed:
+    news_errors: dict[str, str] = {}
+    enriched_calendar = list(discovery.facts)
+    for consensus in initial_consensuses:
+        if consensus.event_date is None:
             continue
         calendar_rows = [row for row in discovery.facts
                          if row.symbol == consensus.symbol]
-        news_payload = mcp.news(
-            symbols=consensus.symbol,
-            start=(observed_at.date() - dt.timedelta(days=30)).isoformat(),
-            end=window.deadline.isoformat(), sort="desc", limit=50,
-            include_content=False)
-        news = list(alpaca_news_facts(news_payload, symbol=consensus.symbol))
+        try:
+            news_payload = mcp.news(
+                symbols=consensus.symbol,
+                start=(observed_at.date() - dt.timedelta(days=30)).isoformat(),
+                end=window.deadline.isoformat(), sort="desc", limit=50,
+                include_content=False)
+            news = list(alpaca_news_facts(
+                news_payload, symbol=consensus.symbol))
+        except Exception as exc:  # noqa: BLE001 — candidate remains fail-closed
+            news = []
+            news_errors[consensus.symbol] = f"{type(exc).__name__}: {exc}"
         news_counts[consensus.symbol] = len(news)
+        enriched_calendar.extend(news_schedule_facts(
+            news, symbol=consensus.symbol,
+            event_date=consensus.event_date))
         facts_by_symbol[consensus.symbol] = [
             *(calendar_catalyst_fact(row, observed_at=observed_at)
               for row in calendar_rows), *news]
 
+    # Recompute the date quorum and explicit-session rule after enrichment.
+    # The Featherless committee is intentionally absent from this decision.
+    consensuses = calendar_consensus(enriched_calendar)
     semantics, semantic_reasons = _committee(featherless_key, facts_by_symbol) \
         if facts_by_symbol else ({}, [])
     candidate_rows: list[dict[str, Any]] = []
@@ -199,23 +216,27 @@ def build_plan(
         row: dict[str, Any] = {
             "symbol": consensus.symbol,
             "calendar": asdict(consensus),
-            "calendar_facts": [asdict(value) for value in discovery.facts
+            "calendar_facts": [asdict(value) for value in enriched_calendar
                                if value.symbol == consensus.symbol],
             "news_fact_count": news_counts.get(consensus.symbol, 0),
+            "news_error": news_errors.get(consensus.symbol),
         }
         schedule = None
         replay = None
         current_premium = None
         current_spread = None
-        try:
-            if consensus.event_date is None:
-                raise ValueError("calendar did not produce a unique event date")
-            expiries = _listed_expiries(mcp, consensus.symbol, consensus.event_date)
-            schedule = schedule_event(
-                consensus, sessions=sessions, expiries=expiries, window=window)
-            row["schedule"] = asdict(schedule)
-        except Exception as exc:  # noqa: BLE001 — rejection is recorded
-            row["schedule_error"] = f"{type(exc).__name__}: {exc}"
+        if consensus.confirmed and consensus.event_date is not None:
+            try:
+                expiries = _listed_expiries(
+                    mcp, consensus.symbol, consensus.event_date)
+                schedule = schedule_event(
+                    consensus, sessions=sessions, expiries=expiries, window=window)
+                row["schedule"] = asdict(schedule)
+            except Exception as exc:  # noqa: BLE001 — rejection is recorded
+                row["schedule_error"] = f"{type(exc).__name__}: {exc}"
+        else:
+            row["schedule_error"] = (
+                "skipped: date quorum or explicit session evidence is unavailable")
 
         semantic = semantics.get(consensus.symbol)
         semantic_confirmed = bool(
@@ -250,6 +271,8 @@ def build_plan(
             replay=replay.summary if replay else None, schedule=schedule,
             current_premium_to_spot=current_premium,
             current_total_spread_pct=current_spread,
+            schedule_error=row.get("schedule_error"),
+            replay_error=row.get("replay_error"),
             require_current_surface=False)
         row["promotion"] = asdict(decision)
         row["promotion"]["live_surface_gate_deferred"] = True
@@ -275,7 +298,10 @@ def build_plan(
         "equity_at_plan": equity,
         "universe_size": len(symbols),
         "calendar": {
-            "fact_count": len(discovery.facts),
+            "fact_count": len(enriched_calendar),
+            "discovered_fact_count": len(discovery.facts),
+            "enriched_schedule_fact_count": (
+                len(enriched_calendar) - len(discovery.facts)),
             "source_errors": list(discovery.errors),
             "consensus": [asdict(value) for value in consensuses],
         },
@@ -297,7 +323,7 @@ def build_plan(
         },
         "invariants": [
             "The plan itself has no order authority.",
-            "Every order candidate needs independent date/session calendar quorum.",
+            "Every order candidate needs an independent date quorum and explicit, uncontradicted session evidence.",
             "Featherless classifies supplied facts but cannot select, size, or order.",
             "Every entry repeats the live option quote, width, freshness, and premium gates.",
             "Every position exits on its own next-session clock or the global deadline.",
@@ -316,6 +342,9 @@ def main() -> int:
     parser.add_argument("--minimum-market-cap", type=float, default=2_000_000_000)
     parser.add_argument("--output", default="data/weekly_event_plan.json")
     parser.add_argument("--ledger", default="data/weekly_event_evidence.jsonl")
+    parser.add_argument(
+        "--archive-dir", default="data/weekly_event_plan_archive",
+        help="append-only directory for sealed candidate-level plan snapshots")
     args = parser.parse_args()
     if not 3 <= args.historical_events <= 20:
         parser.error("--historical-events must be in [3, 20]")
@@ -350,6 +379,11 @@ def main() -> int:
                 minimum_market_cap=args.minimum_market_cap)
         sealed = seal_plan(plan)
         atomic_write_plan(ROOT / args.output, sealed)
+        archive_name = (
+            observed_at.astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            + f"-{sealed['plan_sha256'][:12]}.json")
+        archive_path = ROOT / args.archive_dir / archive_name
+        atomic_write_plan(archive_path, sealed)
         audit = AuditLedger(ROOT / args.ledger).append(
             "weekly_plan_built", {
                 "plan_sha256": sealed["plan_sha256"],
@@ -358,6 +392,23 @@ def main() -> int:
                 "promoted": [row["symbol"] for row in sealed["events"]
                              if row["promotion"]["promoted"]],
                 "calendar_source_errors": sealed["calendar"]["source_errors"],
+                "archive": str(Path(args.archive_dir) / archive_name),
+                "candidates": [{
+                    "symbol": row["symbol"],
+                    "calendar_confirmed": row["calendar"]["confirmed"],
+                    "calendar_reasons": row["calendar"]["reasons"],
+                    "news_fact_count": row["news_fact_count"],
+                    "news_error": row.get("news_error"),
+                    "semantic_status": (
+                        row["semantic"]["status"] if row.get("semantic") else None),
+                    "schedule_error": row.get("schedule_error"),
+                    "replay_sample_size": (
+                        ((row.get("replay") or {}).get("summary") or {}).get(
+                            "sample_size")),
+                    "replay_error": row.get("replay_error"),
+                    "promoted": row["promotion"]["promoted"],
+                    "promotion_reasons": row["promotion"]["reasons"],
+                } for row in sealed["events"]],
             }, recorded_at=observed_at)
     except Exception as exc:  # noqa: BLE001 — one safe, audited failure boundary
         log(f"weekly plan failed: {type(exc).__name__}: {exc}")

@@ -51,3 +51,37 @@ def test_calendar_and_alpaca_news_become_bounded_catalyst_facts():
         "source": "wire",
     }]}, symbol="AVGO")
     assert len(news) == 1 and news[0].fact_id == "alpaca:3"
+
+
+def test_yahoo_unknown_code_uses_explicit_after_close_timestamp():
+    stamp = dt.datetime(2026, 9, 10, 16, 5, tzinfo=ET)
+    assert event_calendar._timing("unknown", stamp=stamp) is EventTiming.AFTER_CLOSE
+    midnight = dt.datetime(2026, 9, 10, 0, 0, tzinfo=ET)
+    assert event_calendar._timing("unknown", stamp=midnight) is EventTiming.UNKNOWN
+
+
+def test_explicit_dated_news_can_confirm_the_missing_session():
+    observed = dt.datetime(2026, 9, 8, 12, tzinfo=ET)
+    facts = event_calendar.alpaca_news_facts({"news": [{
+        "id": 4, "created_at": observed.isoformat(),
+        "headline": "AVGO will report earnings after market close on September 10",
+        "summary": "Quarterly results are scheduled.", "symbols": ["AVGO"],
+        "source": "Benzinga",
+    }]}, symbol="AVGO")
+    rows = event_calendar.news_schedule_facts(
+        facts, symbol="AVGO", event_date=dt.date(2026, 9, 10))
+    assert len(rows) == 1
+    assert rows[0].timing is EventTiming.AFTER_CLOSE
+    assert rows[0].source == "news_benzinga"
+
+
+def test_news_without_explicit_date_does_not_confirm_a_session():
+    observed = dt.datetime(2026, 9, 1, 12, tzinfo=ET)
+    facts = event_calendar.alpaca_news_facts({"news": [{
+        "id": 5, "created_at": observed.isoformat(),
+        "headline": "AVGO will report earnings after market close",
+        "summary": "Quarterly results are scheduled.", "symbols": ["AVGO"],
+        "source": "wire",
+    }]}, symbol="AVGO")
+    assert event_calendar.news_schedule_facts(
+        facts, symbol="AVGO", event_date=dt.date(2026, 9, 10)) == ()

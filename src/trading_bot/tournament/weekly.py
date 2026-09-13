@@ -75,11 +75,12 @@ class EventConsensus:
 def calendar_consensus(
     facts: Iterable[CalendarFact], *, minimum_sources: int = 2,
 ) -> tuple[EventConsensus, ...]:
-    """Require independent sources to agree on both release date and session.
+    """Require a date quorum plus explicit, uncontradicted session evidence.
 
-    Multiple endpoints from one vendor still count as one source.  A conflict is
-    not resolved by confidence scoring or by an LLM; the event stays shadow-only
-    until the upstream facts converge.
+    Multiple endpoints from one vendor still count as one source. At least two
+    independent sources must agree on the date; at least one of those sources
+    must supply a concrete before/after-market session and none may contradict
+    it. A conflict is never resolved by confidence scoring or by an LLM.
     """
     if minimum_sources < 2:
         raise ValueError("calendar quorum must require at least two sources")
@@ -109,12 +110,62 @@ def calendar_consensus(
                    if len(sources) >= minimum_sources]
         if len(winners) != 1:
             reasons.append(
-                "no unique independent date-and-session quorum"
+                "no unique independent date quorum with explicit session evidence"
                 if not winners else "multiple calendar quorums conflict")
+            # Preserve a two-source date consensus even when one provider does
+            # not publish the session. This is not trade confirmation: it only
+            # permits bounded news enrichment and semantic research for the
+            # agreed date. schedule_event still refuses this row.
+            date_votes: dict[tuple[dt.date, str], set[str]] = {}
+            for row in rows:
+                date_votes.setdefault(
+                    (row.event_date, row.event_type), set()).add(row.source)
+            date_winners = [(key, sources) for key, sources in date_votes.items()
+                            if len(sources) >= minimum_sources]
+            event_date = None
+            event_type = "earnings"
+            agreeing_sources: set[str] = set()
+            if len(date_winners) == 1:
+                (event_date, event_type), agreeing_sources = date_winners[0]
+                date_dissent = {
+                    row.source for row in rows
+                    if row.source not in agreeing_sources
+                    or (row.event_date, row.event_type) != (event_date, event_type)
+                }
+                session_votes: dict[EventTiming, set[str]] = {}
+                for row in rows:
+                    if (row.source in agreeing_sources
+                            and row.event_date == event_date
+                            and row.event_type == event_type
+                            and row.timing is not EventTiming.UNKNOWN):
+                        session_votes.setdefault(row.timing, set()).add(row.source)
+                if (not conflicting_source and not date_dissent
+                        and len(session_votes) == 1):
+                    timing, timing_sources = next(iter(session_votes.items()))
+                    reasons.pop()  # replace the provisional no-full-quorum reason
+                    reasons.append(
+                        f"{len(agreeing_sources)} independent sources agree on date; "
+                        f"explicit {timing.value} session from "
+                        f"{', '.join(sorted(timing_sources))} is uncontradicted")
+                    output.append(EventConsensus(
+                        symbol, event_date, timing, event_type,
+                        tuple(sorted(agreeing_sources)),
+                        tuple(sorted(row.fact_id for row in rows
+                                     if row.source in agreeing_sources
+                                     and row.event_date == event_date)),
+                        True, tuple(reasons)))
+                    continue
+                if len(session_votes) > 1:
+                    reasons.append("calendar sources conflict on event session")
+                else:
+                    reasons.append(
+                        f"{len(agreeing_sources)} independent sources agree on date; "
+                        "explicit session evidence is still required")
             output.append(EventConsensus(
-                symbol, None, EventTiming.UNKNOWN, "earnings",
-                tuple(sorted(source_rows)),
-                tuple(sorted({row.fact_id for row in rows})), False,
+                symbol, event_date, EventTiming.UNKNOWN, event_type,
+                tuple(sorted(agreeing_sources or source_rows)),
+                tuple(sorted(row.fact_id for row in rows
+                             if not agreeing_sources or row.source in agreeing_sources)), False,
                 tuple(reasons)))
             continue
 
@@ -281,18 +332,29 @@ def evaluate_promotion(
     current_premium_to_spot: float | None,
     current_total_spread_pct: float | None,
     require_current_surface: bool = True,
+    schedule_error: str | None = None,
+    replay_error: str | None = None,
     policy: PromotionPolicy = PromotionPolicy(),
 ) -> PromotionDecision:
     """Frozen promotion rule; every failed input produces an explicit reason."""
     reasons: list[str] = []
     if not consensus.confirmed:
-        reasons.append("calendar date/session lacks an independent source quorum")
+        reasons.append(
+            "calendar lacks an independent date quorum or explicit, uncontradicted session")
+        reasons.extend(reason for reason in consensus.reasons
+                       if reason not in reasons)
+        # Every later stage depends on confirmed date + session. Reporting each
+        # skipped stage as an independent outage hid the actual root cause.
+        return PromotionDecision(consensus.symbol, False, 0.0, tuple(reasons))
     if not semantic_confirmed:
         reasons.append("Featherless event/status quorum is unavailable")
     if schedule is None:
-        reasons.append("entry and next-session exit do not fit the weekly window")
+        reasons.append(schedule_error or
+                       "entry and next-session exit do not fit the weekly window")
+    if schedule is None:
+        return PromotionDecision(consensus.symbol, False, 0.0, tuple(reasons))
     if replay is None:
-        reasons.append("historical option replay is unavailable")
+        reasons.append(replay_error or "historical option replay is unavailable")
         edge = 0.0
     else:
         edge = replay.conservative_edge

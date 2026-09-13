@@ -75,6 +75,42 @@ def test_same_vendor_cannot_manufacture_a_calendar_quorum():
     assert not row.confirmed
 
 
+def test_date_quorum_plus_one_explicit_uncontradicted_session_confirms():
+    row = calendar_consensus([
+        fact("yahoo", timing=EventTiming.AFTER_CLOSE),
+        fact("nasdaq", timing=EventTiming.UNKNOWN),
+    ])[0]
+    assert row.confirmed
+    assert row.event_date == dt.date(2026, 9, 2)
+    assert row.timing is EventTiming.AFTER_CLOSE
+    assert any("uncontradicted" in reason for reason in row.reasons)
+
+
+def test_date_quorum_is_preserved_while_all_sessions_are_missing():
+    row = calendar_consensus([
+        fact("yahoo", timing=EventTiming.UNKNOWN),
+        fact("nasdaq", timing=EventTiming.UNKNOWN),
+    ])[0]
+    assert not row.confirmed
+    assert row.event_date == dt.date(2026, 9, 2)
+    assert row.timing is EventTiming.UNKNOWN
+
+
+def test_calendar_root_cause_does_not_claim_downstream_systems_failed():
+    pending = calendar_consensus([
+        fact("yahoo", timing=EventTiming.UNKNOWN),
+        fact("nasdaq", timing=EventTiming.UNKNOWN),
+    ])[0]
+    decision = evaluate_promotion(
+        consensus=pending, semantic_confirmed=False, replay=None,
+        schedule=None, current_premium_to_spot=None,
+        current_total_spread_pct=None)
+    joined = " ".join(decision.reasons)
+    assert "calendar" in joined
+    assert "Featherless" not in joined
+    assert "historical option replay" not in joined
+
+
 def test_after_close_schedule_uses_same_close_and_next_exchange_morning():
     row = schedule()
     assert row.entry_start == dt.datetime(2026, 9, 2, 15, 20, tzinfo=ET)

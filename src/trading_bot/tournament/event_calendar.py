@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,12 +33,31 @@ class CalendarDiscovery:
     errors: tuple[str, ...]
 
 
-def _timing(value: Any) -> EventTiming:
+def _timing(value: Any, *, stamp: Any | None = None) -> EventTiming:
     text = str(value or "").strip().lower().replace("_", "-")
-    if text in {"amc", "after market close", "after-hours", "time-after-hours"}:
+    if text in {"amc", "after market close", "after-hours",
+                "time-after-hours"}:
         return EventTiming.AFTER_CLOSE
-    if text in {"bmo", "before market open", "pre-market", "time-pre-market"}:
+    if text in {"bmo", "before market open", "pre-market",
+                "time-pre-market"}:
         return EventTiming.BEFORE_OPEN
+    # Yahoo sometimes supplies an undocumented timing code but a timezone-aware
+    # Event Start Date (for example 16:05 ET). Preserve the provider's explicit
+    # timestamp instead of degrading a perfectly usable session to UNKNOWN.
+    if stamp is not None:
+        try:
+            local = stamp.to_pydatetime() if hasattr(stamp, "to_pydatetime") else stamp
+            if local.tzinfo is None:
+                local = local.replace(tzinfo=ET)
+            local = local.astimezone(ET)
+            if local.time() >= dt.time(16):
+                return EventTiming.AFTER_CLOSE
+            # Midnight is commonly a date-only placeholder, not a release
+            # session. Only a plausible pre-market clock time is evidence.
+            if dt.time(4) <= local.time() < dt.time(9, 30):
+                return EventTiming.BEFORE_OPEN
+        except (AttributeError, TypeError, ValueError):
+            pass
     return EventTiming.UNKNOWN
 
 
@@ -68,7 +88,7 @@ def yahoo_earnings_facts(
             if stamp.tzinfo is None:
                 stamp = stamp.tz_localize(ET)
             stamp = stamp.tz_convert(ET)
-            timing = _timing(row.get("Timing"))
+            timing = _timing(row.get("Timing"), stamp=stamp)
         except (KeyError, TypeError, ValueError):
             continue
         if market_cap < minimum_market_cap or not start <= stamp.date() <= end:
@@ -200,3 +220,72 @@ def alpaca_news_facts(payload: Any, *, symbol: str) -> tuple[CatalystFact, ...]:
         (relevant if any(word in haystack for word in relevant_words)
          else context).append(fact)
     return tuple([*relevant[:8], *context[:2]])
+
+
+_AFTER_CLOSE = re.compile(
+    r"\b(?:after(?:\s+the)?\s+(?:market\s+)?close|after[- ]hours?|post[- ]market)\b",
+    re.IGNORECASE)
+_BEFORE_OPEN = re.compile(
+    r"\b(?:before(?:\s+the)?\s+(?:market\s+)?open(?:s|ing)?|pre[- ]market)\b",
+    re.IGNORECASE)
+_FUTURE_EVENT = re.compile(
+    r"\b(?:will|expects?\s+to|scheduled|set\s+to|due\s+to|to\s+(?:report|release|announce))\b",
+    re.IGNORECASE)
+
+
+def _mentions_date(text: str, event_date: dt.date, published_at: str) -> bool:
+    """Accept an explicit date, or an unambiguous next-weekday reference."""
+    month = event_date.strftime("%B")
+    short_month = event_date.strftime("%b")
+    day = str(event_date.day)
+    patterns = (
+        event_date.isoformat(),
+        f"{month} {day}", f"{short_month} {day}",
+        f"{event_date.month}/{event_date.day}/{event_date.year}",
+        f"{event_date.month}/{event_date.day}/{str(event_date.year)[2:]}",
+    )
+    lowered = text.lower()
+    if any(value.lower() in lowered for value in patterns):
+        return True
+    weekday = event_date.strftime("%A").lower()
+    if not re.search(rf"\b{re.escape(weekday)}\b", lowered):
+        return False
+    try:
+        published = dt.datetime.fromisoformat(
+            str(published_at).replace("Z", "+00:00")).date()
+    except ValueError:
+        return False
+    days_ahead = (event_date - published).days
+    return 0 <= days_ahead <= 7
+
+
+def news_schedule_facts(
+    facts: Iterable[CatalystFact], *, symbol: str, event_date: dt.date,
+) -> tuple[CalendarFact, ...]:
+    """Promote explicit, independently sourced news schedules to calendar facts.
+
+    The article must describe a future event, name the relevant date (or the
+    unambiguous next weekday), and state the market session. Model output is not
+    used here: this parser only recognizes a small deterministic vocabulary.
+    """
+    output: list[CalendarFact] = []
+    for fact in facts:
+        if symbol not in fact.symbols:
+            continue
+        text = f"{fact.headline} {fact.summary}"
+        if not _FUTURE_EVENT.search(text) or not _mentions_date(
+                text, event_date, fact.published_at):
+            continue
+        after = bool(_AFTER_CLOSE.search(text))
+        before = bool(_BEFORE_OPEN.search(text))
+        if after == before:
+            continue
+        timing = EventTiming.AFTER_CLOSE if after else EventTiming.BEFORE_OPEN
+        source = re.sub(r"[^a-z0-9]+", "_", fact.source.lower()).strip("_")
+        source = f"news_{source or 'unknown'}"
+        output.append(CalendarFact(
+            symbol=symbol, event_date=event_date, timing=timing,
+            source=source, fact_id=f"schedule:{fact.fact_id}",
+            summary=(f"{fact.source} explicitly schedules {symbol} earnings "
+                     f"for {event_date.isoformat()} in the {timing.value} session.")))
+    return tuple(output)

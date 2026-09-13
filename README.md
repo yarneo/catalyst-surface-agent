@@ -181,7 +181,7 @@ position. Full methods and event-level outcomes are in
 ```text
 weekly intelligence
         |
-        +----> two independent calendars + Alpaca MCP history
+        +----> two-source date quorum + explicit session + Alpaca MCP history
         +----> Featherless typed committee
         +----> deterministic replay + frozen promotion policy
         v

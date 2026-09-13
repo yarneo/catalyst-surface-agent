@@ -398,6 +398,7 @@ def _refresh_plan(
         sys.executable, str(ROOT / "scripts" / "build_weekly_event_plan.py"),
         "--env", args.env, "--featherless-env", args.featherless_env,
         "--output", args.plan, "--ledger", args.planner_ledger,
+        "--archive-dir", args.planner_archive_dir,
     ]
     if prior_window is not None:
         start, deadline = prior_window.start, prior_window.deadline
@@ -447,6 +448,8 @@ def main() -> int:
     parser.add_argument("--book", default="data/weekly_event_book.json")
     parser.add_argument("--ledger", default="data/weekly_event_evidence.jsonl")
     parser.add_argument("--planner-ledger", default="data/weekly_event_evidence.jsonl")
+    parser.add_argument(
+        "--planner-archive-dir", default="data/weekly_event_plan_archive")
     parser.add_argument("--lock", default="data/weekly_event_agent.lock")
     parser.add_argument("--enable-orders", action="store_true")
     parser.add_argument("--flatten", action="store_true")

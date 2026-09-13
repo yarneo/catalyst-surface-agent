@@ -66,6 +66,38 @@ def test_server_runtime_excludes_incompatible_fastmcp_4(monkeypatch):
     ]
 
 
+def test_initialize_timeout_restarts_child_and_retries(monkeypatch):
+    launches = []
+
+    class Process:
+        stdin = stdout = stderr = None
+        def terminate(self): pass
+        def wait(self, timeout=None): return 0
+
+    def fake_popen(*args, **kwargs):
+        launches.append((args, kwargs))
+        return Process()
+
+    c = MCPClient("k", "s", timeout=90, startup_attempts=3,
+                  startup_timeout=5, startup_backoff=0)
+    attempts = iter([MCPError("initialize: timed out"), {"serverInfo": {}}])
+
+    def rpc(method, params):
+        result = next(attempts)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr("trading_bot.options.mcp.subprocess.Popen", fake_popen)
+    monkeypatch.setattr(c, "_drain_stdout", lambda: None)
+    monkeypatch.setattr(c, "_drain_stderr", lambda: None)
+    monkeypatch.setattr(c, "_rpc", rpc)
+    monkeypatch.setattr(c, "_notify", lambda method, params: None)
+    assert c.start() is c
+    assert len(launches) == 2
+    assert c.timeout == 90
+
+
 # ------------------------------------------------------------ idempotency
 
 
