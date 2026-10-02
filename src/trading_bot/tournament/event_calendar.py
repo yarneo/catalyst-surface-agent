@@ -31,6 +31,28 @@ class CalendarSourceError(RuntimeError):
 class CalendarDiscovery:
     facts: tuple[CalendarFact, ...]
     errors: tuple[str, ...]
+    provider_fact_counts: tuple[tuple[str, int], ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
+def candidate_event_dates(
+    facts: Iterable[CalendarFact],
+) -> dict[str, dt.date]:
+    """Return unambiguous dates that are safe to use for more research.
+
+    A single source is deliberately sufficient here because the result grants
+    no trading authority. It only scopes an independent news lookup. Final
+    promotion still goes through the two-source calendar consensus gate.
+    """
+    by_symbol: dict[str, set[tuple[dt.date, str]]] = {}
+    for fact in facts:
+        by_symbol.setdefault(fact.symbol, set()).add(
+            (fact.event_date, fact.event_type))
+    return {
+        symbol: next(iter(values))[0]
+        for symbol, values in sorted(by_symbol.items())
+        if len(values) == 1
+    }
 
 
 def _timing(value: Any, *, stamp: Any | None = None) -> EventTiming:
@@ -175,15 +197,27 @@ def discover_earnings_calendar(
     """Run both feeds independently and preserve a partial result for audit."""
     facts: list[CalendarFact] = []
     errors: list[str] = []
+    counts: list[tuple[str, int]] = []
     for name, provider in (("yahoo", yahoo_earnings_facts),
                            ("nasdaq", nasdaq_earnings_facts)):
         try:
-            facts.extend(provider(
+            rows = tuple(provider(
                 start, end, minimum_market_cap=minimum_market_cap,
                 universe=universe))
+            facts.extend(rows)
+            counts.append((name, len(rows)))
         except Exception as exc:  # noqa: BLE001 — each provider is isolated
             errors.append(f"{name}: {type(exc).__name__}: {exc}")
-    return CalendarDiscovery(tuple(facts), tuple(errors))
+            counts.append((name, 0))
+    warnings: list[str] = []
+    if facts:
+        for name, count in counts:
+            if count == 0 and not any(error.startswith(f"{name}:") for error in errors):
+                warnings.append(
+                    f"{name}: returned zero in-universe facts while another provider "
+                    "returned candidates")
+    return CalendarDiscovery(
+        tuple(facts), tuple(errors), tuple(counts), tuple(warnings))
 
 
 def calendar_catalyst_fact(fact: CalendarFact, *, observed_at: dt.datetime) -> CatalystFact:

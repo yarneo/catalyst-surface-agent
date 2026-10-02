@@ -28,6 +28,7 @@ from trading_bot.options.mcp import MCPClient  # noqa: E402
 from trading_bot.tournament.audit import AuditLedger  # noqa: E402
 from trading_bot.tournament.event_calendar import (  # noqa: E402
     alpaca_news_facts,
+    candidate_event_dates,
     calendar_catalyst_fact,
     discover_earnings_calendar,
     news_schedule_facts,
@@ -173,35 +174,31 @@ def build_plan(
     discovery = discover_earnings_calendar(
         window.start.date(), window.deadline.date(),
         minimum_market_cap=minimum_market_cap, universe=symbols)
-    # First establish a date quorum. Some providers publish the date but omit
-    # the before/after-market session. Only those date-confirmed candidates are
-    # eligible for bounded broker-news enrichment.
-    initial_consensuses = calendar_consensus(discovery.facts)
     facts_by_symbol: dict[str, list[Any]] = {}
     news_counts: dict[str, int] = {}
     news_errors: dict[str, str] = {}
     enriched_calendar = list(discovery.facts)
-    for consensus in initial_consensuses:
-        if consensus.event_date is None:
-            continue
+    # A provisional date scopes research but grants no trade authority. News
+    # enrichment must remain reachable when one calendar feed is unavailable;
+    # otherwise the second-source confirmation path becomes circular.
+    for symbol, event_date in candidate_event_dates(discovery.facts).items():
         calendar_rows = [row for row in discovery.facts
-                         if row.symbol == consensus.symbol]
+                         if row.symbol == symbol]
         try:
             news_payload = mcp.news(
-                symbols=consensus.symbol,
+                symbols=symbol,
                 start=(observed_at.date() - dt.timedelta(days=30)).isoformat(),
                 end=window.deadline.isoformat(), sort="desc", limit=50,
                 include_content=False)
             news = list(alpaca_news_facts(
-                news_payload, symbol=consensus.symbol))
+                news_payload, symbol=symbol))
         except Exception as exc:  # noqa: BLE001 — candidate remains fail-closed
             news = []
-            news_errors[consensus.symbol] = f"{type(exc).__name__}: {exc}"
-        news_counts[consensus.symbol] = len(news)
+            news_errors[symbol] = f"{type(exc).__name__}: {exc}"
+        news_counts[symbol] = len(news)
         enriched_calendar.extend(news_schedule_facts(
-            news, symbol=consensus.symbol,
-            event_date=consensus.event_date))
-        facts_by_symbol[consensus.symbol] = [
+            news, symbol=symbol, event_date=event_date))
+        facts_by_symbol[symbol] = [
             *(calendar_catalyst_fact(row, observed_at=observed_at)
               for row in calendar_rows), *news]
 
@@ -303,6 +300,8 @@ def build_plan(
             "enriched_schedule_fact_count": (
                 len(enriched_calendar) - len(discovery.facts)),
             "source_errors": list(discovery.errors),
+            "source_warnings": list(discovery.warnings),
+            "provider_fact_counts": dict(discovery.provider_fact_counts),
             "consensus": [asdict(value) for value in consensuses],
         },
         "semantic_committee_reasons": semantic_reasons,

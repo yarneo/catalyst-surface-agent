@@ -35,6 +35,40 @@ def test_discovery_preserves_one_feed_when_the_other_fails(monkeypatch):
         dt.date(2026, 9, 1), dt.date(2026, 9, 3))
     assert result.facts == (row,)
     assert len(result.errors) == 1 and "yahoo" in result.errors[0]
+    assert dict(result.provider_fact_counts) == {"yahoo": 0, "nasdaq": 1}
+
+
+def test_discovery_audits_silent_empty_provider(monkeypatch):
+    row = CalendarFact(
+        "AVGO", dt.date(2026, 9, 2), EventTiming.AFTER_CLOSE,
+        "nasdaq_calendar", "nasdaq:avgo", "scheduled")
+    monkeypatch.setattr(event_calendar, "yahoo_earnings_facts", lambda *a, **k: ())
+    monkeypatch.setattr(event_calendar, "nasdaq_earnings_facts", lambda *a, **k: (row,))
+    result = event_calendar.discover_earnings_calendar(
+        dt.date(2026, 9, 1), dt.date(2026, 9, 3))
+    assert result.errors == ()
+    assert result.warnings == (
+        "yahoo: returned zero in-universe facts while another provider returned candidates",
+    )
+
+
+def test_single_source_date_can_seed_research_without_confirming_trade():
+    row = CalendarFact(
+        "AVGO", dt.date(2026, 9, 2), EventTiming.AFTER_CLOSE,
+        "nasdaq_calendar", "nasdaq:avgo", "scheduled")
+    assert event_calendar.candidate_event_dates((row,)) == {
+        "AVGO": dt.date(2026, 9, 2),
+    }
+
+
+def test_conflicting_dates_cannot_seed_news_enrichment():
+    facts = (
+        CalendarFact("AVGO", dt.date(2026, 9, 2), EventTiming.UNKNOWN,
+                     "yahoo_calendar", "yahoo:avgo", "first"),
+        CalendarFact("AVGO", dt.date(2026, 9, 3), EventTiming.AFTER_CLOSE,
+                     "nasdaq_calendar", "nasdaq:avgo", "second"),
+    )
+    assert event_calendar.candidate_event_dates(facts) == {}
 
 
 def test_calendar_and_alpaca_news_become_bounded_catalyst_facts():
