@@ -165,6 +165,8 @@ def _run():
             collection["status"] = "OBSERVED"
         except Exception as exc:
             collection.update(status="BLOCKED", reason=str(exc))
+    elif str(end) > manifest["start_after"]:
+        collection.update(status="BLOCKED", reason="completed session has no pre-open decision record")
     forward = {name:[x["row"] for x in observations(forward_root,name)] for name in by_name}
     for row in rows:
         if row["name"] not in by_name:
@@ -188,7 +190,7 @@ def _run():
         crises.append({"name":name, "status":"COVERED_PROXY" if sample else "UNAVAILABLE_FUND_HISTORY",
                        "metrics": performance(sample),
                        "qqq_return": float(qqq_window.iloc[-1]/qqq_window.iloc[0]-1) if len(qqq_window)>1 else None})
-    output = {"status":"COLLECTING", "at":iso_now(), "as_of":str(end), "cohort":cohort,
+    output = {"status":"DATA_BLOCKED" if collection["status"]=="BLOCKED" else "COLLECTING", "at":iso_now(), "as_of":str(end), "cohort":cohort,
               "frozen_at":manifest["frozen_at"], "forward_start_after":manifest["start_after"], "data_hash":data_hash, "parity":parity,
               "method":"completed daily signals; following open; modeled 5/25bp costs; whole-portfolio proxy",
               "candidates":rows, "historical_crises":crises,
@@ -227,4 +229,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--prepare", action="store_true", help="freeze decisions before the exchange open")
     args = parser.parse_args()
-    prepare() if args.prepare else run()
+    if args.prepare:
+        prepare()
+    elif run()["status"] == "DATA_BLOCKED":
+        raise SystemExit(1)

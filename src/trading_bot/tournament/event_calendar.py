@@ -242,11 +242,17 @@ def alpaca_news_facts(payload: Any, *, symbol: str) -> tuple[CatalystFact, ...]:
         if not isinstance(row, dict) or symbol not in (row.get("symbols") or []):
             continue
         try:
+            from html import unescape
+            # Summaries often omit the release session while the body states
+            # it explicitly. Strip markup and preserve bounded article text.
+            body = str(row.get("content") or row.get("summary") or "")
+            body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body, flags=re.I|re.S)
+            body = " ".join(unescape(re.sub(r"<[^>]+>", " ", body)).split())
             fact = CatalystFact(
                 fact_id=f"alpaca:{row['id']}",
                 published_at=str(row.get("created_at") or row.get("updated_at")),
                 headline=str(row["headline"])[:500],
-                summary=str(row.get("summary") or row.get("content") or "")[:4000],
+                summary=body[:4000],
                 symbols=(symbol,), source=str(row.get("source") or "alpaca_news"))
         except (KeyError, TypeError, ValueError):
             continue
@@ -257,7 +263,7 @@ def alpaca_news_facts(payload: Any, *, symbol: str) -> tuple[CatalystFact, ...]:
 
 
 _AFTER_CLOSE = re.compile(
-    r"\b(?:after(?:\s+the)?\s+(?:market\s+)?close|after[- ]hours?|post[- ]market)\b",
+    r"\b(?:after(?:\s+the)?\s+(?:market\s+)?(?:closes?|closing\s+bell)|after[- ]hours?|post[- ]market)\b",
     re.IGNORECASE)
 _BEFORE_OPEN = re.compile(
     r"\b(?:before(?:\s+the)?\s+(?:market\s+)?open(?:s|ing)?|pre[- ]market)\b",
@@ -272,15 +278,13 @@ def _mentions_date(text: str, event_date: dt.date, published_at: str) -> bool:
     month = event_date.strftime("%B")
     short_month = event_date.strftime("%b")
     day = str(event_date.day)
-    patterns = (
-        event_date.isoformat(),
-        f"{month} {day}", f"{short_month} {day}",
-        f"{event_date.month}/{event_date.day}/{event_date.year}",
-        f"{event_date.month}/{event_date.day}/{str(event_date.year)[2:]}",
-    )
     lowered = text.lower()
-    if any(value.lower() in lowered for value in patterns):
-        return True
+    explicit = re.search(rf"\b(?:{re.escape(month)}|{re.escape(short_month)}\.?)\s+{day}(?!\d)(?:st|nd|rd|th)?(?:,?\s+(\d{{4}}))?\b", text, re.I)
+    if explicit:
+        return explicit.group(1) is None or int(explicit.group(1))==event_date.year
+    patterns = (event_date.isoformat(), f"{event_date.month}/{event_date.day}/{event_date.year}",
+                f"{event_date.month}/{event_date.day}/{str(event_date.year)[2:]}")
+    if any(re.search(r"(?<!\d)"+re.escape(value)+r"(?!\d)",text) for value in patterns):return True
     weekday = event_date.strftime("%A").lower()
     if not re.search(rf"\b{re.escape(weekday)}\b", lowered):
         return False

@@ -165,6 +165,8 @@ def build_plan(
     *, mcp: MCPClient, featherless_key: str, window: WeeklyWindow,
     observed_at: dt.datetime, symbols: tuple[str, ...],
     historical_events: int, minimum_market_cap: float,
+    portfolio_policy: PortfolioPolicy = PortfolioPolicy(),
+    deployment_profile: str = "research",
 ) -> dict[str, Any]:
     sessions_payload = mcp.calendar(
         (window.start.date() - dt.timedelta(days=10)).isoformat(),
@@ -189,7 +191,7 @@ def build_plan(
                 symbols=symbol,
                 start=(observed_at.date() - dt.timedelta(days=30)).isoformat(),
                 end=window.deadline.isoformat(), sort="desc", limit=50,
-                include_content=False)
+                include_content=True)
             news = list(alpaca_news_facts(
                 news_payload, symbol=symbol))
         except Exception as exc:  # noqa: BLE001 — candidate remains fail-closed
@@ -282,11 +284,12 @@ def build_plan(
     account = mcp.account()
     equity = float(account["equity"])
     allocations = allocate_event_risk(decisions, equity=equity,
-                                      policy=PortfolioPolicy())
+                                      policy=portfolio_policy)
     for row in candidate_rows:
         row["max_loss_budget_usd"] = allocations.get(row["symbol"], 0.0)
     return {
         "mode": "AUTONOMOUS_WEEKLY_RESEARCH_PLAN",
+        "deployment_profile": deployment_profile,
         "order_enabled": False,
         "generated_at": observed_at.isoformat(),
         "window": {"start": window.start.isoformat(),
@@ -307,8 +310,10 @@ def build_plan(
         "semantic_committee_reasons": semantic_reasons,
         "events": candidate_rows,
         "portfolio": {
-            "aggregate_risk_pct": .25, "per_event_risk_pct": .125,
-            "singleton_risk_pct": .25, "allocations_usd": allocations,
+            "aggregate_risk_pct": portfolio_policy.aggregate_risk_pct,
+            "per_event_risk_pct": portfolio_policy.per_event_risk_pct,
+            "singleton_risk_pct": portfolio_policy.singleton_risk_pct,
+            "allocations_usd": allocations,
         },
         "source": {
             "discovery": ["Yahoo Finance calendar", "Nasdaq earnings calendar"],
@@ -344,6 +349,8 @@ def main() -> int:
     parser.add_argument(
         "--archive-dir", default="data/weekly_event_plan_archive",
         help="append-only directory for sealed candidate-level plan snapshots")
+    parser.add_argument("--production-shadow", action="store_true",
+        help="zero-authority observation profile (2%% per event, 5%% total)")
     args = parser.parse_args()
     if not 3 <= args.historical_events <= 20:
         parser.error("--historical-events must be in [3, 20]")
@@ -363,19 +370,22 @@ def main() -> int:
     key, secret = config.get("ALPACA_API_KEY"), config.get("ALPACA_SECRET_KEY")
     featherless_key = config.get("FEATHERLESS_API_KEY")
     expected_account = str(config.get("ALPACA_ACCOUNT_NUMBER") or "")
-    if not key or not secret or not featherless_key or not expected_account:
+    if not key or not secret or not featherless_key or (not args.production_shadow and not expected_account):
         log("plan configuration is incomplete")
         return 5
     try:
         with MCPClient(str(key), str(secret), live=False, paper=True, timeout=90) as mcp:
             account = mcp.account()
-            if str(account.get("account_number") or "") != expected_account:
+            if expected_account and str(account.get("account_number") or "") != expected_account:
                 raise RuntimeError("paper-account pin mismatch")
             plan = build_plan(
                 mcp=mcp, featherless_key=str(featherless_key), window=window,
                 observed_at=observed_at, symbols=symbols,
                 historical_events=args.historical_events,
-                minimum_market_cap=args.minimum_market_cap)
+                minimum_market_cap=args.minimum_market_cap,
+                portfolio_policy=PortfolioPolicy(aggregate_risk_pct=.05, per_event_risk_pct=.02,
+                    singleton_risk_pct=.02) if args.production_shadow else PortfolioPolicy(),
+                deployment_profile="event_options_shadow" if args.production_shadow else "research")
         sealed = seal_plan(plan)
         atomic_write_plan(ROOT / args.output, sealed)
         archive_name = (

@@ -107,6 +107,13 @@ virtual execution within 09:35–09:45 ET, forward plans before the open, and
 close settlement/replay verification after the close. The exchange calendar
 governs eligibility; repeated runs cannot create additional evidence.
 
+Collector failures return a failing process status for the existing scheduled
+job alerting path, as well as a visible dashboard state. Options calendar
+confirmation uses bounded, markup-stripped Alpaca article bodies when summaries
+omit the release session. Explicit dates are checked at full day/year boundaries;
+provider errors remain recorded and the independent-source quorum is preserved.
+The general shadow planner profile is now included in code-only releases.
+
 Run `uv run pytest` for the default suite. Portfolio installations use
 `uv sync --extra portfolio`.
 

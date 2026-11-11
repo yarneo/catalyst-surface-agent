@@ -74,4 +74,5 @@ def run(phase="collect"):
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--phase",choices=("collect","observe","close"),default="collect")
-    run(parser.parse_args().phase)
+    if run(parser.parse_args().phase)["status"] == "DATA_BLOCKED":
+        raise SystemExit(1)

@@ -119,3 +119,20 @@ def test_news_without_explicit_date_does_not_confirm_a_session():
     }]}, symbol="AVGO")
     assert event_calendar.news_schedule_facts(
         facts, symbol="AVGO", event_date=dt.date(2026, 9, 10)) == ()
+
+
+def test_article_body_can_supply_session_missing_from_summary():
+    facts=event_calendar.alpaca_news_facts({"news":[{
+        "id":9,"symbols":["AAA"],"created_at":"2026-11-03T21:00:00Z",
+        "headline":"AAA schedules earnings call","summary":"A call is planned for November 12.",
+        "content":"<p>AAA will announce results on November 12, 2026. Results will be released after the market closes.</p>",
+        "source":"wire"}]},symbol="AAA")
+    rows=event_calendar.news_schedule_facts(facts,symbol="AAA",event_date=dt.date(2026,11,12))
+    assert len(rows)==1 and rows[0].timing is EventTiming.AFTER_CLOSE
+    assert "<p>" not in facts[0].summary
+
+
+def test_explicit_date_does_not_match_partial_day_or_wrong_year():
+    assert not event_calendar._mentions_date("November 12, 2026",dt.date(2026,11,1),"2026-11-01T10:00:00Z")
+    assert not event_calendar._mentions_date("November 12, 2025",dt.date(2026,11,12),"2026-11-01T10:00:00Z")
+    assert event_calendar._mentions_date("Nov. 12, 2026",dt.date(2026,11,12),"2026-11-01T10:00:00Z")

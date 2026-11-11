@@ -68,6 +68,8 @@ def engine_fingerprint(root):
 class Recorder:
     def __init__(self,folder,metadata=None):
         self.folder=Path(folder)
+        self.folder.mkdir(parents=True,exist_ok=True,mode=0o700)
+        (self.folder/"broker.jsonl").touch(mode=0o600)
         self.metadata=metadata or {}
         self.sequence=0
         atomic_json(self.folder/"metadata.json",self.metadata)
