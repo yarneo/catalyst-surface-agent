@@ -51,7 +51,9 @@ class FakeBroker:
 
     def _place(self, coid, qty):
         tail = coid.rsplit("-", 1)[-1]
-        rung = int(tail) if tail.isdigit() else 0
+        # Entry UUID suffixes can randomly contain digits only. Only the
+        # short, explicit close-ladder suffix represents a rung.
+        rung = int(tail) if tail.isdigit() and len(tail) <= 2 else 0
         status, filled = self.script.get(rung, ("new", 0))
         self.submitted.append((coid, qty))
         # Shaped like a real Alpaca payload, deliberately:

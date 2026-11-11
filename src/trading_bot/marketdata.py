@@ -32,6 +32,56 @@ from __future__ import annotations
 
 import pandas as pd
 import yfinance as yf
+import numpy as np
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import date
+
+from .sessions import last_completed_session
+
+_AS_OF: ContextVar[date | None] = ContextVar("signal_session", default=None)
+_CACHE: ContextVar[dict | None] = ContextVar("signal_cache", default=None)
+_CAPTURE: ContextVar[dict | None] = ContextVar("signal_capture", default=None)
+
+
+@contextmanager
+def signal_session(day: date):
+    """Freeze the signal date and source series for one entire portfolio cycle."""
+    token = _AS_OF.set(day)
+    cache_token = _CACHE.set({})
+    capture_token = _CAPTURE.set({})
+    try:
+        yield
+    finally:
+        _AS_OF.reset(token)
+        _CACHE.reset(cache_token)
+        _CAPTURE.reset(capture_token)
+
+
+def captured_signals() -> dict:
+    """Exact completed bars used by this cycle, for private production replay."""
+    return dict(_CAPTURE.get() or {})
+
+
+def completed_bars(frame: pd.DataFrame, symbol: str, column: str = "close") -> pd.DataFrame:
+    expected = _AS_OF.get() or last_completed_session()
+    out = frame.copy().sort_index()
+    out = out.loc[~out.index.duplicated(keep="last")]
+    out = out.loc[pd.to_datetime(out.index).date <= expected]
+    if out.empty or pd.Timestamp(out.index[-1]).date() != expected:
+        raise PriceUnavailable(f"{symbol}: missing completed session {expected}")
+    price = pd.to_numeric(out[column], errors="coerce")
+    if not np.isfinite(price.iloc[-1]) or price.iloc[-1] <= 0:
+        raise PriceUnavailable(f"{symbol}: invalid completed-session price")
+    out = out.loc[np.isfinite(price) & (price > 0)]
+    capture = _CAPTURE.get()
+    if capture is not None:
+        import json
+        normalized = out.rename(columns=str.lower)
+        existing = capture.get(symbol)
+        if existing is None or len(existing["data"]) < len(out):
+            capture[symbol] = json.loads(normalized.to_json(orient="split", date_format="iso"))
+    return out
 
 
 class PriceUnavailable(RuntimeError):
@@ -47,6 +97,13 @@ def close_series(symbol: str, period: str = "400d", min_bars: int = 1) -> pd.Ser
     Raises ``PriceUnavailable`` if fewer than ``min_bars`` usable bars remain,
     so a short or empty history can't be mistaken for a valid signal.
     """
+    cache = _CACHE.get()
+    key = (symbol, period)
+    if cache is not None and key in cache:
+        closes = cache[key]
+        if len(closes) < min_bars:
+            raise PriceUnavailable(f"{symbol}: insufficient completed history")
+        return closes.copy()
     try:
         hist = yf.Ticker(symbol).history(period=period, auto_adjust=True)
     except Exception as exc:  # noqa: BLE001 — network/parse errors all mean "no data"
@@ -55,12 +112,14 @@ def close_series(symbol: str, period: str = "400d", min_bars: int = 1) -> pd.Ser
     if hist is None or hist.empty or "Close" not in hist:
         raise PriceUnavailable(f"{symbol}: no history returned for period={period}")
 
-    closes = hist["Close"].dropna()
+    closes = completed_bars(hist, symbol, "Close")["Close"]
     if len(closes) < min_bars:
         raise PriceUnavailable(
             f"{symbol}: only {len(closes)} usable bars after dropping NaN "
             f"(need {min_bars}) for period={period}"
         )
+    if cache is not None:
+        cache[key] = closes.copy()
     return closes
 
 

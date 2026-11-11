@@ -1,0 +1,17 @@
+# Generic paper-runtime defaults. Credentials and deployment state stay external.
+universe: [SPY, DIA, IWM, MDY, XLK, XLF, XLV, XLI, XLB, XLU, XLE, XLP, XLY, XLC, GLD]
+crypto_universe: [BTC-USD, ETH-USD, XRP-USD, ADA-USD, LTC-USD, DOGE-USD]
+pead_universe: [AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, CRM, ORCL, AMD, INTC, IBM, JPM, BAC, GS, V, MA, WFC, C, UNH, JNJ, PFE, LLY, ABBV, MRK, XOM, CVX, WMT, PG, KO, PEP, COST, MCD, NKE, SBUX, DIS, KHC, CAT, BA, GE, HON, NFLX, T, VZ]
+data:
+  start: '2010-01-01'
+  end: '2024-12-31'
+  train_frac: 0.70
+backtest:
+  initial_capital: 100000
+  cost_bps: 5.0
+  periods_per_year: 252
+validation:
+  n_trials: 20
+broker:
+  provider: alpaca
+  paper: true

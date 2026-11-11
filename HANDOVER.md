@@ -16,7 +16,26 @@ contribution target. Never copy credentials, account identifiers, mutable
 books, runtime ledgers, logs, or host-specific launch configuration from that
 checkout into this repository.
 
-## Current deployment status
+## Portfolio runtime (2026-11)
+
+The reusable private-portfolio runtime now lives in this repository alongside
+the event engine. Read [the hardening register](docs/PORTFOLIO_HARDENING.md)
+before changing execution, reporting, or research promotion. Its private
+deployment and account are separate from the historical event result below.
+
+The portfolio has a fill-confirmed order coordinator, one-minute risk
+supervision, durable state, broker-based accounting, and frozen whole-portfolio
+experiments. Run `uv run pytest` for the default suite. Install runtime extras
+with `uv sync --extra portfolio`. The old equal-third research model is
+quarantined; conditional backtests must not be described as production-parity
+performance. A 70% QLD ceiling is retained while alternatives collect evidence.
+
+Use code-only release manifests. Never copy private state into this repository
+or change dashboard access controls when deploying. Production replay inputs,
+signal bars, order journals, forward observations, backups and host schedules
+belong on the private runtime.
+
+## Historical event deployment
 
 The measured lifecycle is complete. The agent bought 13 AVGO Sep 4 $367.50
 straddles at a $29.60 combined debit on Sep 2 and autonomously exited at

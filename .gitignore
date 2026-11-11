@@ -10,10 +10,10 @@ __pycache__/
 !.env.example
 .streamlit/secrets.toml
 
-data/
-logs/
-reports/
-output/
-tmp/
+/data/
+/logs/
+/reports/
+/output/
+/tmp/
 *.bak
 *.tmp

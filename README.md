@@ -283,6 +283,20 @@ uv run streamlit run app/streamlit_app.py
 
 ## Safety model
 
+The reusable portfolio runtime is also available here. Its private deployment
+combines ETF strategies, a volatility-scaled Nasdaq regime sleeve, managed
+futures and Treasury reserves. The portfolio supervisor checks broker holdings,
+confirms fills before dependent purchases, and records completed cycles.
+The event-options observer remains isolated from portfolio order authority.
+
+Install portfolio runtime dependencies with `uv sync --extra portfolio`.
+Run the default validation suite with `uv run pytest`.
+The [hardening register](docs/PORTFOLIO_HARDENING.md) describes the execution
+controls, frozen experiments, evidence requirements, and remaining validation.
+Private dashboards, credentials, deployment configuration and account evidence
+remain outside this repository. Code-only releases use
+`scripts/build_portfolio_release.py` and `scripts/install_portfolio_release.py`.
+
 - Paper trading only; no live-money support is intended.
 - Credentials and account identifiers never belong in source, prompts, logs,
   examples, screenshots, fixtures, or issues.
