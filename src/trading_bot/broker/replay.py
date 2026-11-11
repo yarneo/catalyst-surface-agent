@@ -82,7 +82,7 @@ class MemoryClient:
         return order
 
 
-def replay_cycle(snapshot, frames, prices, *, cost_bps=5):
+def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None):
     """Replay one archived open; neither broker access nor private writes exist."""
     import importlib.util
     import sys
@@ -92,6 +92,7 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5):
     from ..live.executor import ExecutorState, PaperExecutor
     from ..live import executor, regime_executor, managed_futures_executor, cash_park_executor
     from ..sessions import ET
+    from . import evidence
 
     root = Path(__file__).resolve().parents[3]
     path = root / "scripts/run_portfolio.py"
@@ -108,6 +109,7 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5):
         return deepcopy(saved[-1] if saved else state)
     def save_state(value,*args,**kwargs):
         saved.append(deepcopy(value))
+        evidence.capture_inputs(lambda: {"final_state":asdict(value)})
     def series(symbol, period="400d", min_bars=1):
         out = marketdata.completed_bars(frames[symbol], symbol)["close"]
         if len(out)<min_bars:
@@ -126,6 +128,7 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5):
         stack.enter_context(patch.object(runner,"AlpacaBroker",lambda:broker))
         stack.enter_context(patch.object(runner,"ChampionStore",lambda:NS(path=path, all=lambda:champions, get=champions.get)))
         stack.enter_context(patch.object(runner,"now_et",lambda:moment))
+        stack.enter_context(patch.object(runner,"last_completed_session",lambda:signal_day))
         stack.enter_context(patch.object(executor,"now_et",lambda:moment))
         stack.enter_context(patch.object(ExecutorState,"load",side_effect=load_state))
         stack.enter_context(patch.object(ExecutorState,"save",save_state))
@@ -146,11 +149,122 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5):
             if name in snapshot.get("arguments", {}):
                 argv += ["--"+name.replace("_","-"), str(snapshot["arguments"][name])]
         stack.enter_context(patch.object(sys,"argv",argv))
+        if capture_to is not None:
+            stack.enter_context(patch.object(evidence,"DATA",Path(capture_to)))
         with marketdata.signal_session(signal_day):
-            runner._run()
+            with evidence.capture_cycle(capture_to is not None,root):
+                runner._run()
     account=client.get_account()
     return {"orders":[vars(o) for o in client.orders.values()], "cash":account.cash,
             "equity":account.portfolio_value,"positions":client.positions,
             "state":asdict(saved[-1] if saved else state),
             "network_access":False,"order_authority":False,
             "engine":"production_orchestrator","fill_model":f"{cost_bps}bp modeled venue quotes"}
+
+
+def verify_recorded_cycle(folder):
+    """Re-run production against its exact broker reads, quotes and responses.
+
+    Requests must match in sequence and quantity. Nothing is submitted, and a
+    no-trade replay is explicitly distinguished from a verified fill path.
+    """
+    import hashlib
+    import importlib.util
+    import json
+    import socket
+    import sys
+    import pandas as pd
+    import requests
+    from .evidence import PlaybackClient, ReplayMismatch, engine_fingerprint
+    from .. import allocations, config, learning, marketdata
+    from ..live import executor, regime_executor, managed_futures_executor, cash_park_executor
+    from ..live.executor import ExecutorState, PaperExecutor
+    from ..sessions import ET
+    from ..signals.overlay import SignalOverlay
+
+    folder=Path(folder)
+    required=("metadata.json","broker.jsonl","signals.json")
+    integrity=json.loads((folder/"integrity.json").read_text())
+    if any(name not in integrity or hashlib.sha256((folder/name).read_bytes()).hexdigest()!=integrity[name] for name in required):
+        raise ReplayMismatch("incomplete or altered production evidence")
+    meta=json.loads((folder/"metadata.json").read_text())
+    if meta.get("status") not in {"COMPLETED","FAILED"} or "initial_state" not in meta:
+        return {"status":"INCOMPLETE_CAPTURE","order_authority":False,"network_access":False}
+    rows=[json.loads(line) for line in (folder/"broker.jsonl").read_text().splitlines()]
+    frames={s:pd.DataFrame(raw["data"],columns=raw["columns"],index=pd.to_datetime(raw["index"]))
+            for s,raw in json.loads((folder/"signals.json").read_text()).items()}
+    root=Path(__file__).resolve().parents[3]
+    path=root/"scripts/run_portfolio.py"
+    spec=importlib.util.spec_from_file_location("recorded_portfolio_replay",path)
+    runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
+    client=PlaybackClient(rows)
+    initial=ExecutorState(**meta["initial_state"])
+    saved=[]
+    champions={s:learning.Champion(**v) for s,v in meta["champions"].items()}
+    moment=datetime.fromisoformat(meta["at"]).astimezone(ET)
+    signal_day=datetime.fromisoformat(meta["signal_session"]).date()
+    def series(symbol,period="400d",min_bars=1):
+        out=marketdata.completed_bars(frames[symbol],symbol)["close"]
+        if len(out)<min_bars:raise ReplayMismatch("recorded signal window is too short")
+        return out
+    def save_state(value,*a,**kw):saved.append(deepcopy(value))
+    def metadata(key):
+        if key not in meta:raise ReplayMismatch("missing archived "+key)
+        return deepcopy(meta[key])
+    error=None
+    with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack, redirect_stdout(io.StringIO()):
+        journal=Path(tmp)/"orders.json";journal.write_text(json.dumps(meta["initial_journal"]))
+        broker=AlpacaBroker.__new__(AlpacaBroker);broker._client=client
+        broker.orders=OrderCoordinator(client,journal,"replay",sleep=lambda _:None)
+        broker.cash_reserve,broker.bil_reserve,broker.max_leverage=.02,.10,1.
+        broker.quote=lambda symbol:client.consume("quote",symbol)
+        store=NS(path=path,all=lambda:champions,get=champions.get)
+        patches=[
+            (runner,"AlpacaBroker",lambda:broker), (runner,"ChampionStore",lambda:store),
+            (learning,"ChampionStore",lambda:store), (runner,"now_et",lambda:moment),
+            (runner,"last_completed_session",lambda:signal_day), (executor,"now_et",lambda:moment),
+            (runner,"DATA",Path(tmp)), (config,"load_config",lambda:metadata("config")),
+            (ExecutorState,"load",lambda *a,**k:deepcopy(saved[-1] if saved else initial)),
+            (ExecutorState,"save",save_state),
+            (PaperExecutor,"_recent_bars",lambda self,s:marketdata.completed_bars(frames[s],s)),
+            (allocations,"read_allocations",lambda **kw:metadata("allocations")),
+            (runner,"load_policy",lambda:metadata("policy")), (marketdata,"close_series",series),
+            (SignalOverlay,"apply",lambda self,s,w:client.consume("overlay",s,w)),
+            (executor,"ai_authority_gate",lambda *a,**kw:client.consume("ai_authority")),
+            (executor,"read_jsonl",lambda *a,**kw:[]), (executor,"append_ai_decision",lambda *a,**kw:None),
+            (regime_executor,"record_shadow_portfolios",lambda *a,**kw:{}),
+            (runner,"atomic_json",lambda *a,**kw:None),
+        ]
+        for obj,name,value in patches:stack.enter_context(patch.object(obj,name,value))
+        for module in (regime_executor,managed_futures_executor,cash_park_executor):
+            stack.enter_context(patch.object(module,"send_telegram",lambda *a,**kw:None))
+        stack.enter_context(patch("trading_bot.broker.alpaca_client.append_execution_intent",lambda *a,**kw:None))
+        stack.enter_context(patch.object(requests.sessions.Session,"request",side_effect=RuntimeError("network disabled in replay")))
+        stack.enter_context(patch.object(socket.socket,"connect",side_effect=RuntimeError("network disabled in replay")))
+        argv=[str(path)]
+        for name,value in meta["arguments"].items():
+            option="--"+name.replace("_","-")
+            if isinstance(value,bool):
+                if value:argv.append(option)
+            elif isinstance(value,list):
+                if value:argv += [option,*map(str,value)]
+            elif value is not None:argv += [option,str(value)]
+        stack.enter_context(patch.object(sys,"argv",argv))
+        try:
+            with marketdata.signal_session(signal_day):runner._run()
+            client.assert_finished()
+        except BaseException as exc:
+            error=exc
+    same_engine=meta.get("engine_hash")==engine_fingerprint(root)
+    actual=asdict(saved[-1] if saved else initial)
+    expected=meta.get("final_state",meta["initial_state"])
+    different=[k for k in expected if k!="updated_at" and actual.get(k)!=expected[k]]
+    status="MATCHED" if error is None and not different and meta["status"]=="COMPLETED" else "MISMATCH"
+    if status=="MATCHED" and not same_engine:status="MATCHED_CHANGED_ENGINE"
+    return {"status":status,"session":str(moment.date()),"cycle":folder.name,
+        "engine_hash":meta.get("engine_hash"),"same_engine":same_engine,
+        "recorded_calls":len(rows),"verified_calls":client.index,
+        "order_requests_verified":sum(r["method"]=="submit_order" for r in rows) if status.startswith("MATCHED") else 0,
+        "risk_state_differences":different,"error_type":type(error).__name__ if error else None,
+        "error":str(error)[:300] if error else None,"network_access":False,"order_authority":False,
+        "scope":"decision requests, archived broker responses and risk state; not independent alpha or daily-proxy validation"}

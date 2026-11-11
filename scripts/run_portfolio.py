@@ -53,8 +53,11 @@ import traceback
 import sys
 import json
 from datetime import date
+from pathlib import Path
+from dataclasses import asdict
 
 from trading_bot.broker import AlpacaBroker
+from trading_bot.broker.evidence import capture_broker, capture_inputs, capture_cycle
 from trading_bot.cycle import SessionState, plan_cycle
 from trading_bot.config import (
     load_crypto_universe,
@@ -284,7 +287,7 @@ def _run() -> None:
     for name in args.disable:
         enabled[name] = False
 
-    broker = AlpacaBroker()
+    broker = capture_broker(AlpacaBroker())
     cycle_id = now_et().date().isoformat() + ":" + args.phase
     if args.phase == "risk":
         cycle_id += ":" + now_et().strftime("%H%M")
@@ -352,6 +355,10 @@ def _run() -> None:
     # need to change WHAT happens, change the planner and its tests.
     state = ExecutorState.load(require_existing=bool(args.live or raw_positions))
     store = ChampionStore()
+    from trading_bot.config import load_config
+    capture_inputs(lambda: {"at":now_et().isoformat(),"signal_session":last_completed_session().isoformat(),
+        "arguments":vars(args).copy(),"config":load_config(),"initial_state":asdict(state),
+        "champions":{s:c.as_dict() for s,c in store.all().items()}})
     plan = plan_cycle(
         phase=args.phase,
         today=now_et().date().isoformat(),
@@ -457,12 +464,12 @@ def _run() -> None:
     from trading_bot.allocations import read_allocations
     _alloc_file = read_allocations(enabled_sleeves=enabled, require_fresh=args.live)
     portfolio_policy = load_policy()
+    capture_inputs(lambda: {"allocations":_alloc_file,"policy":portfolio_policy})
     if portfolio_policy.get("status") == "INVALID_FALLBACK":
         raise RuntimeError("invalid portfolio policy; refusing default risk allocation")
     broker.bil_reserve = float(portfolio_policy["config"]["bil_buffer"])
     broker.max_leverage = args.max_leverage
     if args.phase == "open" and args.live:
-        from dataclasses import asdict
         snapshot_path = DATA / "production_inputs" / (state.session_date + ".json")
         if not snapshot_path.exists():
             atomic_json(snapshot_path, {
@@ -667,7 +674,9 @@ def main() -> None:
     phase = sys.argv[sys.argv.index("--phase") + 1] if "--phase" in sys.argv else "unknown"
     inspect_only = "--inspect" in sys.argv
     status_path = DATA / "portfolio_cycles.json"
-    with execution_lock(wait=180 if phase != "risk" else 0), signal_session(last_completed_session()):
+    with execution_lock(wait=180 if phase != "risk" else 0), signal_session(last_completed_session()), \
+            capture_cycle(phase == "open" and "--live" in sys.argv and not inspect_only,
+                          Path(__file__).resolve().parents[1]):
         if inspect_only:
             _run()
             return

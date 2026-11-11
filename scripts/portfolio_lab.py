@@ -12,10 +12,11 @@ from trading_bot.data import load_ohlcv
 from trading_bot.learning import ChampionStore
 from trading_bot.portfolio_policy import load_policy
 from trading_bot.portfolio_research import (EXPERIMENTS, MODEL_VERSION, fingerprint,
-    forward_gate, performance, simulate, stress_scenarios, target_weights)
+    forward_gate, performance, simulate, regime_states, target_weights)
+from trading_bot.forward_lab import seal_decisions, settle_session, observations, ForwardEvidenceError
 from trading_bot.risk import VolatilityTargeted
 from trading_bot.runtime_state import DATA, atomic_json, append_record, execution_lock
-from trading_bot.sessions import last_completed_session, iso_now
+from trading_bot.sessions import last_completed_session, iso_now, now_et, session_bounds
 from trading_bot.strategies import REGISTRY
 
 
@@ -32,7 +33,7 @@ def freeze_manifest(cohort, config, end, at=None):
     return {"cohort": cohort, "frozen_at": at, "start_after": str(max(end, frozen_day)), **config}
 
 
-def _run():
+def context():
     folder = DATA / "research"
     folder.mkdir(parents=True, exist_ok=True)
     end = last_completed_session()
@@ -41,7 +42,11 @@ def _run():
         raise RuntimeError("invalid live policy")
     champions = ChampionStore().all()
     root = Path(__file__).resolve().parents[1]
-    source_paths = [Path(__file__).resolve(), *sorted((root / "src/trading_bot").rglob("*.py"))]
+    # Reporting/transport repairs must not restart a trading-model cohort.
+    source_paths = [Path(__file__).resolve(), *(root / "src/trading_bot" / p for p in
+        ("portfolio_research.py", "forward_lab.py", "shadow_regime.py", "ownership.py",
+         "live/managed_futures_executor.py", "risk/sizing.py")),
+        *sorted((root / "src/trading_bot/strategies").glob("*.py"))]
     source_hash = fingerprint([(p.relative_to(root).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest()) for p in source_paths])
     cohort_config = {"model": MODEL_VERSION, "policy": policy["config"],
                      "source_hash": source_hash,
@@ -54,6 +59,10 @@ def _run():
     else:
         manifest = freeze_manifest(cohort, cohort_config, end)
         atomic_json(manifest_path, manifest)
+    return folder, end, policy, champions, cohort, manifest
+
+
+def inputs(champions, end):
     symbols = sorted(set(champions) | {"QQQ", "QLD", "DBMF", "KMLM", "BIL", "SPY"})
     frames = {s: load_ohlcv(s, "2006-01-01", str(end + timedelta(days=1))) for s in symbols}
     for s,frame in frames.items():
@@ -61,18 +70,62 @@ def _run():
             raise RuntimeError(s + ": stale research market data")
     opens = pd.DataFrame({s: f["open"] for s,f in frames.items()}).dropna()
     closes = pd.DataFrame({s: f["close"] for s,f in frames.items()}).reindex(opens.index)
-    data_hash = hashlib.sha256(pd.util.hash_pandas_object(pd.concat([opens, closes], axis=1), index=True).values.tobytes()).hexdigest()
-    # Freeze the exact input panel privately so revised adjusted histories can
-    # be distinguished from subsequent forward observations.
-    panel_path = folder / "panels" / (data_hash + ".parquet")
-    panel_path.parent.mkdir(exist_ok=True)
-    if not panel_path.exists():
-        pd.concat({"open": opens, "close": closes}, axis=1).to_parquet(panel_path)
     signals = {}
     for s,c in champions.items():
         strat = VolatilityTargeted(REGISTRY[c.strategy](**c.params), target_ann_vol=.10, max_leverage=1.)
         signals[s] = strat.generate_signals(frames[s]).clip(lower=0, upper=.60) / max(1,len(champions))
     etf = pd.DataFrame(signals).reindex(opens.index).fillna(0.)
+    return frames, opens, closes, etf
+
+
+def prepare():
+    with execution_lock(DATA / "portfolio_lab.lock"):
+        now = now_et()
+        bounds = session_bounds(now.date())
+        if bounds is None or now >= bounds[0]:
+            print(json.dumps({"status":"OUTSIDE_PREOPEN_WINDOW", "order_authority":False}))
+            return
+        folder, end, policy, champions, cohort, manifest = context()
+        frames, opens, closes, etf = inputs(champions, end)
+        allocation = read_allocations(require_fresh=True)
+        verdict = allocation.get("verdicts", {}).get("regime", "UNKNOWN")
+        qqq = closes.QQQ
+        sma = qqq.rolling(policy["config"]["ma_window"]).mean()
+        vol = float(qqq.pct_change().tail(20).std() * (252**.5))
+        targets = {spec.name:target_weights(
+            regime_on=bool(regime_states(qqq,sma,spec)[-1]), qqq_vol=vol, verdict=verdict,
+            etf_targets=etf.iloc[-1].to_dict(), spec=spec, policy=policy["config"])
+            for spec in EXPERIMENTS if not spec.pead_weight}
+        plan = seal_decisions(folder/"cohorts"/cohort, manifest, targets, closes.columns, at=iso_now())
+        print(json.dumps({"status":"PREOPEN_FROZEN", "session":plan["session"], "cohort":cohort,
+                          "candidates":len(targets), "order_authority":False}))
+
+
+def raw_marks(symbols, day):
+    import yfinance as yf
+    marks = {}
+    for symbol in symbols:
+        frame = yf.Ticker(symbol).history(start=str(day), end=str(day+timedelta(days=1)),
+                                          auto_adjust=False, actions=True)
+        rows = frame.loc[frame.index.date == day]
+        if len(rows) != 1:
+            raise ForwardEvidenceError(symbol+": completed raw mark unavailable")
+        row = rows.iloc[0]
+        marks[symbol] = {"open":float(row.Open), "close":float(row.Close),
+                         "dividend":float(row.get("Dividends",0)), "split":float(row.get("Stock Splits",0))}
+    return marks
+
+
+def _run():
+    from verify_portfolio_replays import verify_all
+    verification = verify_all()
+    folder, end, policy, champions, cohort, manifest = context()
+    frames, opens, closes, etf = inputs(champions, end)
+    data_hash = hashlib.sha256(pd.util.hash_pandas_object(pd.concat([opens, closes], axis=1), index=True).values.tobytes()).hexdigest()
+    panel_path = folder / "panels" / (data_hash + ".parquet")
+    panel_path.parent.mkdir(exist_ok=True)
+    if not panel_path.exists():
+        pd.concat({"open": opens, "close": closes}, axis=1).to_parquet(panel_path)
     # Explicitly conditional historical proxy. We do not invent an archived
     # allocation verdict for days before we recorded it.
     health = pd.Series("HEALTHY", index=opens.index)
@@ -102,25 +155,23 @@ def _run():
         high_cost[spec.name] = stressed
         rows.append({"name": spec.name, "status": "CONDITIONAL_RESEARCH", "historical": performance(history, benchmark),
                      "high_cost": performance(stressed, benchmark), "forward": [], "order_authority": False})
-    # Only persist fresh, post-freeze observations. Never rewrite a previously
-    # observed return with a later revised market-data panel.
-    forward_path = folder / "cohorts" / (cohort + "-forward.json")
-    forward = json.loads(forward_path.read_text()) if forward_path.exists() else {}
-    for spec in EXPERIMENTS:
-        name = spec.name
-        if name not in by_name:
-            continue
-        history = simulate(opens, closes, etf, health, spec, policy["config"], start_after=manifest["start_after"])
-        observed_dates = {r["date"] for r in forward.setdefault(name, [])}
-        for r in history:
-            if r["date"] > manifest["start_after"] and r["date"] not in observed_dates:
-                forward[name].append({**r, "data_hash": data_hash, "observed_at": iso_now()})
-    atomic_json(forward_path, forward)
+    forward_root = folder / "cohorts" / cohort
+    plan_path = forward_root / "decisions" / (str(end)+".json")
+    collection = {"status":"AWAITING_PREOPEN_PLAN", "session":str(end), "method":"persistent shares; immutable decisions frozen before open"}
+    if plan_path.exists():
+        try:
+            plan = json.loads(plan_path.read_text())
+            settle_session(forward_root,manifest,plan,raw_marks(plan["symbols"],end),observed_at=iso_now())
+            collection["status"] = "OBSERVED"
+        except Exception as exc:
+            collection.update(status="BLOCKED", reason=str(exc))
+    forward = {name:[x["row"] for x in observations(forward_root,name)] for name in by_name}
     for row in rows:
         if row["name"] not in by_name:
             continue
         series = forward[row["name"]]
         row["forward"] = performance(series)
+        row["forward_high_cost"] = performance([x["row"] for x in observations(forward_root,row["name"],25)])
         row["promotion"] = forward_gate(series, forward["baseline_70"], parity=parity)
         # Rebase only the displayed curve; forward returns remain unaltered.
         eq = 100000.
@@ -141,6 +192,8 @@ def _run():
               "frozen_at":manifest["frozen_at"], "forward_start_after":manifest["start_after"], "data_hash":data_hash, "parity":parity,
               "method":"completed daily signals; following open; modeled 5/25bp costs; whole-portfolio proxy",
               "candidates":rows, "historical_crises":crises,
+              "forward_collection":collection,
+              "production_verification":verification,
               "promotion_authority":False, "crypto_enabled":False,
               "next_action":"collect frozen forward observations; resolve parity blockers before any promotion"}
     snapshots = sorted((DATA / "production_inputs").glob("*.json"))
@@ -170,4 +223,8 @@ def _run():
 
 
 if __name__ == "__main__":
-    run()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--prepare", action="store_true", help="freeze decisions before the exchange open")
+    args = parser.parse_args()
+    prepare() if args.prepare else run()

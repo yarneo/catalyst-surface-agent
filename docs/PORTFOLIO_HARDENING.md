@@ -71,6 +71,42 @@ a strong backtest.
 
 ## Verification and operation
 
+### Remaining work: engineering versus elapsed evidence
+
+The prospective evidence release adds these collectors without changing the
+deployed risk budget or granting research candidates order authority:
+
+| Item | Can be finished now | What still needs observations |
+|---|---|---|
+| Exact production replay | Private broker request/response tape, input hashes, offline replay and risk-state comparison; tampering/changed-decision drills | Five distinct scheduled open sessions under the same engine, including at least one order request. This is an operational acceptance threshold, not statistical strategy evidence. |
+| Portfolio forward lab | Pre-open decision sealing; persistent virtual shares/cash; immutable closes; explicit split/dividend economics; gap detection | 60 new sessions and 12 weekly blocks, followed by cost/confidence and parity review. A Nov 12 start reaches session 60 on Feb 9, 2027 if no sessions are missed or model changes require a new cohort. |
+| Earnings drift (PEAD) | Timestamped forecast/result collector; completed reaction filter; subsequent fresh IEX quotes; separate virtual book and corporate-action checks | A forecast must be archived before a new reported result. Eligible entries then need a 60-session holding period. Downloaded old surprises cannot create prospective trades. |
+| Featherless availability | Detect capacity errors even inside HTTP 200; bounded requests; fixed backup pair only when primary votes are missing | Verify provider responses each planning cycle. Valid primary disagreement cannot trigger model shopping. Economic rejection still blocks a candidate even if the provider recovers. |
+| AI contribution | Frozen cohort, duplicate removal and session-level value/cost accounting | 30 independent sessions in which AI changes the target, with marked outcomes. Thirty ordinary calendar/trading days do not necessarily provide this. |
+| Options | Separate infrastructure/economic rejection, quote and lifecycle evidence | 30 independent completed eligible events with executable entry/exit evidence, plus calibration and positive cost-adjusted expectancy. Rejections without quotes have no invented P&L. |
+| Safety and recovery | Synthetic rejected/partial/unknown-fill, stale-data, loss, locking, corrupt-state and restore drills | Observe normal scheduled operation. A natural outage or crash is not required to complete engineering tests, and should never be induced in the trading service. |
+
+Historical venue quotes, champion changes and health decisions that were never
+archived cannot be recovered by simply waiting. Their historical research
+remains conditional. The exact broker-tape replay verifies production code
+against what it actually requested and received; it does **not** independently
+validate broker marks or the daily-bar simulator's fill assumptions.
+
+The PEAD collector currently runs an isolated component book. Integrating its
+actual prospective path into the whole-portfolio allocation comparison, and
+validating candidate-specific production execution, remain separate engineering
+steps once usable inputs exist. The PEAD portfolio row stays `DATA_REQUIRED`;
+a flat or unobserved history must not be presented as a successful test.
+
+Forward books fail visibly on a missed initial/intermediate session. Do not
+silently backdate an entry or restart only a losing candidate. Any recovery or
+new cohort must be recorded and applied consistently to the comparison family.
+
+Collection schedule: PEAD estimates before the open and after the close,
+virtual execution within 09:35–09:45 ET, forward plans before the open, and
+close settlement/replay verification after the close. The exchange calendar
+governs eligibility; repeated runs cannot create additional evidence.
+
 Run `uv run pytest` for the default suite. Portfolio installations use
 `uv sync --extra portfolio`.
 
@@ -79,6 +115,9 @@ Run `uv run pytest` for the default suite. Portfolio installations use
 - `scripts/portfolio_health.py`: independent completed-work watchdog.
 - `scripts/portfolio_close.py`: report once after the actual exchange close.
 - `scripts/portfolio_lab.py`: frozen research; no order authority.
+- `scripts/portfolio_lab.py --prepare`: seal next decisions before that session opens.
+- `scripts/verify_portfolio_replays.py`: compare captured production cycles offline.
+- `scripts/run_pead_shadow.py --phase collect|observe|close`: prospective earnings evidence and virtual fills only.
 - `scripts/portfolio_backup.py`: private backup plus temporary restoration/hash check.
 - `scripts/build_portfolio_release.py`: code-only archive and manifest.
 - `scripts/install_portfolio_release.py`: validate/install under the execution lock; explicit rollback supported.

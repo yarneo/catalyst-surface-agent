@@ -1234,7 +1234,19 @@ def api_reconciliation():
 @app.get("/api/portfolio_lab")
 def api_portfolio_lab():
     path = DATA / "research" / "portfolio_lab.json"
-    return json.loads(path.read_text()) if path.exists() else {"status": "AWAITING_FIRST_RUN"}
+    result = json.loads(path.read_text()) if path.exists() else {"status": "AWAITING_FIRST_RUN"}
+    for key, relative in (("pead_collection", "pead_shadow/summary.json"),
+                          ("production_verification", "research/production_verification.json")):
+        source = DATA / relative
+        result[key] = json.loads(source.read_text()) if source.exists() else {"status": "AWAITING_FIRST_RUN"}
+    # Surface missing collectors instead of displaying an old healthy badge.
+    from trading_bot.sessions import last_completed_session
+    result["expected_completed_session"] = str(last_completed_session())
+    result["report_stale"] = result.get("as_of", "") < result["expected_completed_session"]
+    stamp = result["pead_collection"].get("at")
+    if stamp:
+        result["pead_collection"]["stale"] = (datetime.now(timezone.utc)-datetime.fromisoformat(stamp)).total_seconds()>4*86400
+    return result
 
 
 @app.get("/api/release")

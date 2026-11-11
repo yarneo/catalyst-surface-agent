@@ -127,9 +127,18 @@ def _request(model: str, api_key: str, payload: dict[str, Any],
             detail = response.text[:200]
         raise FeatherlessError(f"HTTP {response.status_code}: {detail}")
     try:
-        return response.json()
+        data = response.json()
     except ValueError as exc:
         raise FeatherlessError("Featherless returned a non-JSON response") from exc
+    # Capacity errors can arrive inside an HTTP 200 response. Preserve their
+    # cause instead of misclassifying them as an empty model answer.
+    if not isinstance(data, dict):
+        raise FeatherlessError("Featherless returned an invalid response object")
+    if data.get("error"):
+        detail=data["error"]
+        code=detail.get("code") or detail.get("type") if isinstance(detail,dict) else "provider_error"
+        raise FeatherlessError("provider error: "+str(code))
+    return data
 
 
 def _request_worker(out: Any, model: str, api_key: str,

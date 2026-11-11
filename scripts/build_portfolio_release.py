@@ -8,9 +8,9 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = "allocations attribution config cycle dashboard_overview event_options_shadow marketdata ownership portfolio_policy research_autopilot runtime_state sessions shadow_regime strategy_evidence portfolio_research".split()
+MODULES = "allocations attribution config cycle dashboard_overview event_options_shadow marketdata ownership portfolio_policy research_autopilot runtime_state sessions shadow_regime strategy_evidence portfolio_research forward_lab pead_shadow".split()
 PACKAGES = "backtest broker data learning live notify risk signals social strategies".split()
-SCRIPTS = "run_portfolio run_event_options_shadow weekly_research precompute_dashboard revalidate update_allocations retrain check_bil_dividends regime_alert portfolio_lab portfolio_backup portfolio_health portfolio_close install_portfolio_release".split()
+SCRIPTS = "run_portfolio run_event_options_shadow weekly_research precompute_dashboard revalidate update_allocations retrain check_bil_dividends regime_alert portfolio_lab portfolio_backup portfolio_health portfolio_close install_portfolio_release run_pead_shadow verify_portfolio_replays".split()
 
 
 def release_files(root=ROOT):
@@ -20,6 +20,7 @@ def release_files(root=ROOT):
     files.extend(root / "scripts" / (name + ".py") for name in SCRIPTS)
     files.extend(p for p in (root / "web").rglob("*") if p.suffix in {".py", ".html", ".css", ".js"})
     files.append(root / "src/trading_bot/options/surface_quality.py")
+    files.extend(root / "src/trading_bot/tournament" / name for name in ("event_semantics.py", "featherless.py"))
     return sorted(set(p for p in files if p.is_file()))
 
 

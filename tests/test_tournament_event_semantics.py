@@ -101,3 +101,34 @@ def test_extra_order_field_invalidates_only_that_ticker_without_accepting_order_
     assert "AAA" not in result.by_ticker()
     assert result.by_ticker()["BBB"].status == "unclear"
     assert all(attempt.error for attempt in result.attempts)
+
+
+def test_fixed_backups_supply_missing_votes_without_bypassing_disagreement():
+    calls=[]
+    def transport(model,*_):
+        calls.append(model)
+        if model in {"b","c"}:raise TimeoutError("capacity")
+        return response()
+    result=EventSemanticClassifier("key",models=("a","b","c"),
+        fallback_models=("d","e"),transport=transport).analyze(FACTS,candidates=CANDIDATES)
+    assert result.by_ticker()["AAA"].status=="upcoming"
+    assert set(calls)=={"a","b","c","d","e"}
+    calls.clear()
+    def disagree(model,*_):
+        calls.append(model)
+        if model=="c":raise TimeoutError("capacity")
+        return response(aaa_status="upcoming" if model=="a" else "occurred")
+    result=EventSemanticClassifier("key",models=("a","b","c"),
+        fallback_models=("d","e"),transport=disagree).analyze(FACTS,candidates=CANDIDATES)
+    assert "AAA" not in result.by_ticker()
+    assert set(calls)=={"a","b","c"}
+
+
+def test_http_200_capacity_error_is_reported_as_provider_failure(monkeypatch):
+    import pytest
+    from types import SimpleNamespace
+    from trading_bot.tournament import featherless
+    monkeypatch.setattr(featherless.requests,"post",lambda *a,**kw:SimpleNamespace(
+        ok=True,json=lambda:{"error":{"code":"capacity_exhausted"}}))
+    with pytest.raises(featherless.FeatherlessError,match="capacity_exhausted"):
+        featherless._request("model","test-key",{},1)

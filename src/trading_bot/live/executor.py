@@ -84,6 +84,8 @@ class ExecutorState:
         self.updated_at = iso_now()
         atomic_json(path.with_suffix(".previous.json"), asdict(self))
         atomic_json(path, asdict(self))
+        from ..broker.evidence import capture_inputs
+        capture_inputs(lambda: {"final_state":asdict(self)})
 
 
 class PaperExecutor:
@@ -190,15 +192,16 @@ class PaperExecutor:
         # enough independent changed decisions and positive measured value-add.
         overlay_weight = quant_weight
         if self.overlay is not None:
-            ov = self.overlay.apply(symbol, quant_weight)
+            from ..broker.evidence import external
+            ov = external("overlay", self.overlay.apply, symbol, quant_weight)
             for r in ov.reasons:
                 self._log(f"  · {r}")
             overlay_weight = ov.adjusted_weight
 
         try:
-            authority = ai_authority_gate(
-                summarize_ai_decisions(read_jsonl(AI_DECISION_LEDGER))
-            )
+            from ..broker.evidence import external
+            authority = external("ai_authority", lambda: ai_authority_gate(
+                summarize_ai_decisions(read_jsonl(AI_DECISION_LEDGER))))
         except Exception as exc:
             authority = {
                 "eligible": False,

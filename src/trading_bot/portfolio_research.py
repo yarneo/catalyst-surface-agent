@@ -18,7 +18,7 @@ from .live.managed_futures_executor import idle_router_targets
 from .ownership import FACTOR_CAPS, factor_exposures, loading_of
 from .shadow_regime import propose_shadow_targets
 
-MODEL_VERSION = "portfolio-lab-v2"
+MODEL_VERSION = "portfolio-lab-v3-prospective"
 
 
 @dataclass(frozen=True)

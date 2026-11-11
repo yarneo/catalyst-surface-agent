@@ -35,6 +35,15 @@ or change dashboard access controls when deploying. Production replay inputs,
 signal bars, order journals, forward observations, backups and host schedules
 belong on the private runtime.
 
+The prospective evidence collectors seal research targets before each open,
+retain virtual holdings across sessions, and settle immutable raw-price closes.
+The production runner records a private broker-response tape for exact offline
+decision/risk-state replay. PEAD estimates must be observed before results;
+its separate quote-priced virtual book cannot place orders. The Strategy tab
+shows collection progress and distinguishes elapsed evidence from missing
+validation. Read the remaining-work table in the hardening register before
+claiming that more days alone make an experiment eligible for deployment.
+
 ## Historical event deployment
 
 The measured lifecycle is complete. The agent bought 13 AVGO Sep 4 $367.50
