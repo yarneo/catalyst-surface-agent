@@ -1,6 +1,7 @@
 """Private state backup plus hash-verified restore drill; never uploads data."""
 from __future__ import annotations
 import hashlib
+import fcntl
 import io
 import json
 from pathlib import Path
@@ -16,18 +17,20 @@ def backup(root, destination):
     destination.chmod(0o700)
     stamp = iso_now().replace(":", "").replace("+", "_")
     output = destination / ("portfolio-" + stamp + ".tar.gz")
-    paths = [p for p in (root / "data").rglob("*") if p.is_file()
-             and p.suffix in {".json", ".jsonl"} and "releases" not in p.parts]
-    paths += [p for p in root.glob(".env*") if p.name != ".env.example" and p.is_file()]
     manifest = {}
-    with execution_lock(root / "data/portfolio.lock"):
+    with execution_lock(root / "data/portfolio.lock", wait=60):
+        paths = [p for p in (root / "data").rglob("*") if p.is_file()
+                 and p.suffix in {".json", ".jsonl"} and "releases" not in p.parts]
+        paths += [p for p in root.glob(".env*") if p.name != ".env.example" and p.is_file()]
         with tarfile.open(output, "w:gz") as archive:
             for p in paths:
                 if p.is_symlink():
                     raise ValueError("symlink in private backup")
                 if p.name.startswith(".env"):
                     p.chmod(0o600)
-                value = p.read_bytes()
+                with p.open("rb") as source:
+                    fcntl.flock(source, fcntl.LOCK_SH)
+                    value = source.read()
                 rel = p.relative_to(root).as_posix()
                 manifest[rel] = hashlib.sha256(value).hexdigest()
                 item = tarfile.TarInfo(rel)
