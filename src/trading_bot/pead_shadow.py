@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import math
 
 from .sessions import ET, calendar, previous_session, session_bounds
+from .market_tape import validate_quote
 
 INITIAL = 10000.0
 HOLD_SESSIONS = 60
@@ -84,14 +85,6 @@ def confirm_reactions(state, frames, *, at):
                      status="PREQUALIFIED" if event["surprise"]>0 and move>0 else "REJECTED_ECONOMIC")
         if str(now.date())>event["entry_session"]:
             event["status"]="MISSED_ENTRY"
-
-
-def validate_quote(quote, *, at):
-    bid,ask=float(quote["bid"]),float(quote["ask"])
-    age=(instant(at)-instant(quote["at"])).total_seconds()
-    if not all(math.isfinite(x) and x>0 for x in (bid,ask)) or ask<bid or not -5<=age<=120 or (ask-bid)/((ask+bid)/2)>.02:
-        raise ValueError("missing, stale or wide executable quote")
-    return bid,ask
 
 
 def begin_day(state, frames, *, at):

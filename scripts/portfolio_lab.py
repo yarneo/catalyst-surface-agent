@@ -48,7 +48,7 @@ def context():
     # Reporting/transport repairs must not restart a trading-model cohort.
     source_paths = [Path(__file__).resolve(), *(root / "src/trading_bot" / p for p in
         ("portfolio_research.py", "forward_lab.py", "shadow_regime.py", "ownership.py",
-         "live/managed_futures_executor.py", "risk/sizing.py", "portfolio_simulator.py", "simulation_policy.py", "pead_shadow.py")),
+         "live/managed_futures_executor.py", "risk/sizing.py", "portfolio_simulator.py", "simulation_policy.py", "pead_shadow.py", "market_tape.py")),
         *sorted((root / "src/trading_bot/strategies").glob("*.py"))]
     source_hash = fingerprint([(p.relative_to(root).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest()) for p in source_paths])
     cohort_config = {"model": MODEL_VERSION,"simulator":SIMULATOR_VERSION,"engine_hash":engine_fingerprint(root),

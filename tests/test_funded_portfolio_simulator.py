@@ -35,6 +35,8 @@ def fixture(day="2026-11-12", pead=False):
         "policy":default_policy(),"arguments":{"no_enrich":True},"version":VERSION}
     plan={"cohort":"synthetic","session":day,"signal_session":str(idx[-1].date()),
           "symbols":list(frames),"execution":execution,"plan_hash":"synthetic"}
+    bounds=session_bounds(datetime.fromisoformat(day).date())
+    plan.update(market_open=bounds[0].isoformat(),market_close=bounds[1].isoformat())
     if pead:
         plan["symbols"] += ["AAPL","MSFT"]
         events={s+":event":{"symbol":s,"status":"PREQUALIFIED","entry_session":day,"reaction_session":str(prior),
@@ -283,3 +285,27 @@ def test_complete_half_day_and_all_cost_books_settle_once(tmp_path):
             assert record["row"]["data_complete"]
             assert record["book_after"]["cash"]>=0
     assert settle_session(tmp_path,manifest,sealed,marks,observed_at="2026-11-27T13:20:00-05:00")==0
+
+
+def test_minute_collector_does_not_import_the_research_engine():
+    import subprocess
+    import sys
+    subprocess.run([sys.executable,"-c",
+        "import scripts.capture_research_market, sys; "
+        "assert not {'pandas','numpy','alpaca','trading_bot.portfolio_simulator'} & sys.modules.keys()"],check=True)
+
+
+def test_lightweight_quote_client_is_bounded_and_read_only(monkeypatch):
+    from scripts import capture_research_market as collector
+    from types import SimpleNamespace
+    import requests
+    import dotenv
+    calls=[]
+    monkeypatch.setattr(dotenv,"dotenv_values",lambda path:{"ALPACA_API_KEY":"fixture","ALPACA_SECRET_KEY":"fixture"})
+    def get(url,**kwargs):
+        calls.append((url,kwargs))
+        return SimpleNamespace(raise_for_status=lambda:None,json=lambda:{"quotes":{"AAPL":{"bp":100.,"ap":100.1,"t":"2026-11-12T14:35:00Z"}}})
+    monkeypatch.setattr(requests,"get",get)
+    assert collector.fetch_quotes(["AAPL"])["AAPL"]["bid"]==100.
+    assert calls[0][0]=="https://data.alpaca.markets/v2/stocks/quotes/latest"
+    assert calls[0][1]["timeout"]==(5,15) and calls[0][1]["params"]["feed"]=="iex"

@@ -8,17 +8,16 @@ from dataclasses import asdict
 from datetime import datetime,timedelta
 import json
 import math
-from pathlib import Path
 
 import pandas as pd
 
 from .broker.replay import replay_cycle
 from .live.executor import ExecutorState
 from .portfolio_research import EXPERIMENTS, fingerprint
-from .runtime_state import atomic_json
 from .sessions import ET, session_bounds
 from .simulation_policy import reconcile_pead
 from .pead_shadow import validate_quote
+from .market_tape import capture_tick, market_tape
 
 VERSION="production-rules-observed-minutes-v1"
 
@@ -35,36 +34,6 @@ def new_book():
     return {"cash":100000.,"positions":{},"previous_equity":100000.,
         "risk_state":asdict(ExecutorState(peak_equity=100000.,day_start_equity=100000.)),
         "pead_state":{"positions":{},"closed":[],"consumed_events":[]}}
-
-
-def capture_tick(folder,plan,quotes,*,at):
-    stamp=datetime.fromisoformat(at)
-    if stamp.tzinfo is None:raise ValueError("quote observation requires an aware timestamp")
-    stamp=stamp.astimezone(ET)
-    bounds=session_bounds(stamp.date())
-    if bounds is None or not bounds[0]+timedelta(minutes=5)<=stamp<bounds[1]:return None
-    if plan["session"]!=str(stamp.date()):raise ValueError("quote session differs from sealed plan")
-    minute=stamp.strftime("%H%M")
-    path=Path(folder)/"market"/plan["session"]/(minute+".json")
-    if path.exists():return json.loads(path.read_text())
-    errors={}
-    for symbol in plan["symbols"]:
-        try:validate_quote(quotes[symbol],at=at)
-        except (KeyError,TypeError,ValueError):errors[symbol]="missing, stale or invalid quote"
-    row={"session":plan["session"],"at":at,"plan_hash":plan["plan_hash"],"quotes":quotes,"errors":errors}
-    row["sha256"]=fingerprint(row)
-    atomic_json(path,row)
-    return row
-
-
-def market_tape(folder,plan):
-    rows=[]
-    for path in sorted((Path(folder)/"market"/plan["session"]).glob("*.json")):
-        row=json.loads(path.read_text())
-        if row.get("plan_hash")!=plan["plan_hash"] or fingerprint({k:v for k,v in row.items() if k!="sha256"})!=row.get("sha256"):
-            raise ValueError("altered or foreign quote tape")
-        rows.append(row)
-    return rows
 
 
 def apply_actions(book,marks):

@@ -31,6 +31,7 @@ def seal_decisions(folder, manifest, targets, symbols, *, at, execution=None, pe
     if str(now.date()) <= manifest["start_after"]:
         raise ForwardEvidenceError("the freeze session is not a forward session")
     result = {"cohort": manifest["cohort"], "session": str(now.date()),
+              "market_open":bounds[0].isoformat(),"market_close":bounds[1].isoformat(),
               "prepared_at": at, "signal_session": str(previous_session(now.date())),
               "symbols": sorted(symbols), "targets": targets,
               "method": "pre-open frozen decisions; subsequent daily open/close proxy; modeled costs"}
@@ -131,6 +132,8 @@ def settle_session(folder, manifest, plan, marks, *, observed_at):
     count = 0
     production = "execution" in plan
     if production:
+        if plan.get("market_open")!=bounds[0].isoformat() or plan.get("market_close")!=bounds[1].isoformat():
+            raise ForwardEvidenceError("sealed exchange bounds do not match the session")
         from .portfolio_simulator import advance_production, market_tape, new_book
         from .portfolio_research import EXPERIMENTS
         tape=market_tape(folder,plan)

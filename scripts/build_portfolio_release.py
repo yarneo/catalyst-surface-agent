@@ -8,7 +8,7 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = "allocations attribution config cycle dashboard_overview event_options_shadow marketdata ownership portfolio_policy research_autopilot runtime_state sessions shadow_regime strategy_evidence portfolio_research forward_lab pead_shadow portfolio_simulator simulation_policy".split()
+MODULES = "allocations attribution config cycle dashboard_overview event_options_shadow marketdata ownership portfolio_policy research_autopilot runtime_state sessions shadow_regime strategy_evidence portfolio_research forward_lab pead_shadow portfolio_simulator simulation_policy market_tape".split()
 PACKAGES = "backtest broker data learning live notify risk signals social strategies".split()
 SCRIPTS = "run_portfolio run_event_options_shadow build_weekly_event_plan weekly_research precompute_dashboard revalidate update_allocations retrain check_bil_dividends regime_alert portfolio_lab portfolio_backup portfolio_health portfolio_close install_portfolio_release run_pead_shadow verify_portfolio_replays capture_research_market".split()
 
