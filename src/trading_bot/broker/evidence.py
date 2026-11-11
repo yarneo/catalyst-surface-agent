@@ -60,7 +60,7 @@ def engine_fingerprint(root):
     paths=[Path(root)/"scripts/run_portfolio.py"]
     paths += [p for p in (Path(root)/"src/trading_bot").rglob("*.py") if
               p.parts[-2] in {"broker","live","risk","strategies","learning","data","signals"}
-              or p.name in {"allocations.py","cycle.py","config.py","ownership.py","marketdata.py","sessions.py","portfolio_policy.py"}]
+              or p.name in {"allocations.py","cycle.py","config.py","ownership.py","marketdata.py","sessions.py","portfolio_policy.py","market_tape.py"}]
     return hashlib.sha256("".join(p.relative_to(root).as_posix()+hashlib.sha256(p.read_bytes()).hexdigest()
                                 for p in sorted(set(paths))).encode()).hexdigest()
 

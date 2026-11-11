@@ -309,3 +309,23 @@ def test_lightweight_quote_client_is_bounded_and_read_only(monkeypatch):
     assert collector.fetch_quotes(["AAPL"])["AAPL"]["bid"]==100.
     assert calls[0][0]=="https://data.alpaca.markets/v2/stocks/quotes/latest"
     assert calls[0][1]["timeout"]==(5,15) and calls[0][1]["params"]["feed"]=="iex"
+
+
+def test_quiet_bil_quotes_can_mark_cash_holdings_but_cannot_fill_orders():
+    plan,_,marks=fixture()
+    opened,closed=session_bounds(datetime.fromisoformat(plan["session"]).date())
+    minute=opened+timedelta(minutes=5);tape=[]
+    while minute<closed:
+        row=tick(plan,minute.strftime("%H:%M"))
+        row["quotes"]["BIL"]["at"]=plan["session"]+"T09:35:00-05:00"
+        if minute>opened+timedelta(minutes=7):row["errors"]["BIL"]="stale executable quote"
+        tape.append(row);minute+=timedelta(minutes=1)
+    book,row,details=advance_production(new_book(),plan,marks,tape,Experiment("baseline_70"),5)
+    assert row["data_complete"] and row["carried_bil_mark_minutes"]>300
+    assert all(o["at"].endswith("09:35:00-05:00") for o in details["orders"])
+    stale=tick(plan,"09:35")
+    stale["quotes"]["BIL"]["at"]=plan["session"]+"T09:00:00-05:00"
+    stale["errors"]["BIL"]="stale executable quote"
+    book,row,details=advance_production(new_book(),plan,marks,[stale],Experiment("baseline_70"),5)
+    assert not row["data_complete"] and row["execution_failures"]==1
+    assert all(o["symbol"]!="BIL" for o in details["orders"])

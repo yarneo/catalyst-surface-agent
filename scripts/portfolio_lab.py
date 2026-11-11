@@ -199,6 +199,8 @@ def _run():
     for row in rows:
         series = forward[row["name"]]
         row["forward"] = performance(series)
+        row["latest_market_coverage"] = {k:series[-1].get(k) for k in
+            ("data_complete","missing_minutes","carried_bil_mark_minutes","execution_failures")} if series else {}
         row["forward_high_cost"] = performance(stressed_forward[row["name"]])
         row["promotion"] = forward_gate(series, forward["baseline_70"], parity=parity)
         row["high_cost_gate"] = forward_gate(stressed_forward[row["name"]],stressed_forward["baseline_70"],parity=parity)

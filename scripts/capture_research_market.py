@@ -44,7 +44,7 @@ def run():
     if not instant(plan["market_open"])+timedelta(minutes=5)<=now<instant(plan["market_close"]):return {"status":"OUTSIDE_WINDOW"}
     quotes=fetch_quotes(plan["symbols"])
     row=capture_tick(folder,plan,quotes,at=iso_now())
-    health={"status":"DATA_BLOCKED" if row and row["errors"] else "COLLECTING",
+    health={"status":"DATA_BLOCKED" if not quotes else "QUOTE_GAPS" if row and row["errors"] else "COLLECTING",
         "at":iso_now(),"session":str(now.date()),"cohort":active["cohort"],
         "symbols":len(quotes),"errors":row["errors"] if row else {},"order_authority":False}
     atomic_json(DATA/"research/market_health.json",health)

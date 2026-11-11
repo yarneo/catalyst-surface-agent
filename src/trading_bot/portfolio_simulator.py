@@ -18,6 +18,7 @@ from .sessions import ET, session_bounds
 from .simulation_policy import reconcile_pead
 from .pead_shadow import validate_quote
 from .market_tape import capture_tick, market_tape
+from .market_tape import instant
 
 VERSION="production-rules-observed-minutes-v1"
 
@@ -75,29 +76,47 @@ def advance_production(book,plan,marks,tape,spec,cost_bps):
         for symbol in plan["symbols"]:
             if symbol not in row.get("errors",{}):validate_quote(row["quotes"][symbol],at=row["at"])
         ticks[minute]=row
-    orders=[];missing=[];open_done=False;pead_done=not bool(spec.pead_weight)
+    orders=[];missing=[];failures=[];carried_bil_marks=0;open_done=False;pead_done=not bool(spec.pead_weight)
     moment=scheduled_open
     while moment<closed:
         row=ticks.get(moment)
-        if row is None or row.get("errors"):
+        if row is None:
             missing.append(moment.isoformat());moment+=timedelta(minutes=1);continue
+        quotes=row["quotes"]
+        prices={}
+        for symbol,q in quotes.items():
+            try:
+                bid,ask=float(q["bid"]),float(q["ask"])
+                age=(instant(row["at"])-instant(q["at"])).total_seconds()
+                if all(math.isfinite(x) and x>0 for x in (bid,ask)) and ask>=bid and -5<=age<=86400:
+                    prices[symbol]=(bid+ask)/2
+            except (KeyError,TypeError,ValueError):pass
+        held={s for s,p in result["positions"].items() if float(p["qty"])>1e-8}
+        # BIL is exempt from strategy price stops. Its last quoted value may
+        # mark an existing cash-equivalent holding, but never price a fill.
+        # Every other held asset needs a fresh mark for minute-level protection.
+        if (held-prices.keys()) or ((held-{"BIL"}) & row.get("errors",{}).keys()):
+            missing.append(moment.isoformat());moment+=timedelta(minutes=1);continue
+        carried_bil_marks += int("BIL" in held and "BIL" in row.get("errors",{}))
         # A missed opening quote never becomes a backdated fill. It is a
         # no-entry day. Existing holdings still receive later protection ticks.
         phase="open" if moment==scheduled_open else "risk"
         if spec.pead_weight and moment==pead_time and open_done:phase="pead"
-        quotes=row["quotes"]
-        prices={s:(float(q["bid"])+float(q["ask"]))/2 for s,q in quotes.items()}
         snapshot={"cash":result["cash"],"last_equity":book["previous_equity"],
             "positions":result["positions"],"state":result["risk_state"],"pead_state":result["pead_state"],
             "at":row["at"],"signal_session":plan["signal_session"],
             **{k:deepcopy(context[k]) for k in ("config","champions","allocations","policy","arguments")}}
         cycle=replay_cycle(snapshot,frames,prices,cost_bps=cost_bps,quotes=quotes,
-            experiment=spec,pead_inputs=plan.get("pead"),phase=phase)
+            experiment=spec,pead_inputs=plan.get("pead"),phase=phase,allow_failure=True)
         result.update(cash=cycle["cash"],positions=cycle["positions"],risk_state=cycle["state"],pead_state=cycle["pead_state"])
         reconcile_pead(result["pead_state"],cycle["orders"],result["positions"],row["at"])
         orders.extend({**o,"at":row["at"],"reference_mid":prices[o["symbol"]]} for o in cycle["orders"])
-        open_done |= phase=="open"
-        pead_done |= phase=="pead"
+        if cycle["error_type"]:
+            failures.append({"at":row["at"],"error_type":cycle["error_type"]})
+            missing.append(moment.isoformat())
+        else:
+            open_done |= phase=="open"
+            pead_done |= phase=="pead"
         moment+=timedelta(minutes=1)
     result["positions"]={s:p for s,p in result["positions"].items() if float(p["qty"])>1e-8}
     equity=result["cash"]+sum(float(p["qty"])*float(marks[s]["close"]) for s,p in result["positions"].items())
@@ -109,7 +128,8 @@ def advance_production(book,plan,marks,tape,spec,cost_bps):
         "cash":result["cash"],"cost":costs,"turnover":turnover,
         "halted":result["risk_state"]["halted_today"],"killed":result["risk_state"]["killed"],
         "data_complete":not missing and open_done and pead_done,"missing_minutes":len(missing),
+        "carried_bil_mark_minutes":carried_bil_marks,"execution_failures":len(failures),
         "open_observed":open_done,"pead_window_observed":pead_done,
         "pead_open_positions":len(result["pead_state"]["positions"]),
         "pead_completed_outcomes":len(result["pead_state"]["closed"])}
-    return result,row,{"orders":orders,"missing_minutes":missing,"quote_tape_hash":fingerprint(tape),"model":VERSION}
+    return result,row,{"orders":orders,"missing_minutes":missing,"execution_failures":failures,"quote_tape_hash":fingerprint(tape),"model":VERSION}

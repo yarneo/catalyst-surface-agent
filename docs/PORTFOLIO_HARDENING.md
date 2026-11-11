@@ -119,9 +119,23 @@ forward plans before the open, one-minute read-only quote capture from 09:35 ET
 through the actual exchange close, and settlement/comparison after the close.
 The component PEAD observer retains its 09:35–09:45 window. Research execution
 is reconstructed from the sealed observed tape; it cannot place broker orders.
-The exchange calendar handles holidays and half days. Missing opening quotes
-produce a no-entry day; missing minutes remain in the reported P&L but do not
-count as complete evidence. Repeated collection cannot rewrite observations.
+The exchange calendar handles holidays and half days. A missing opening
+observation cannot be filled retrospectively; individual orders require fresh
+quotes. Missing required minutes remain in the reported P&L but do not count
+as complete evidence. Repeated collection cannot rewrite observations.
+
+Every fill requires a fresh executable quote; nonheld symbols with stale quotes
+do not disable unrelated protection. An existing BIL cash-equivalent holding
+may use its last quoted value for valuation for at most one day, matching its
+exemption from price stops. Such minutes are counted explicitly. This exception
+never permits a stale-quote BIL purchase, funding sale or exit. Other held assets
+need fresh minute marks. Partial progress before a failed simulated cycle is
+preserved, and failures make the session incomplete.
+
+The minute collector uses a bounded read-only HTTP request and does not import
+the trading SDK, pandas or the simulation engine. Heavy settlement runs after
+close, separately from protection. Host wrappers prevent overlapping imports;
+their machine-specific settings remain private.
 
 Collector failures return a failing process status for the existing scheduled
 job alerting path, as well as a visible dashboard state. Options calendar

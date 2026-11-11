@@ -23,7 +23,7 @@ from .orders import OrderCoordinator
 
 
 class MemoryClient:
-    def __init__(self, snapshot, prices, *, cost_bps=5, quotes=None, fills=None):
+    def __init__(self, snapshot, prices, *, cost_bps=5, quotes=None, fills=None, require_quotes=False):
         self.cash = float(snapshot["cash"])
         self.last_equity = float(snapshot["last_equity"])
         self.prices, self.cost_bps = prices, cost_bps
@@ -32,6 +32,7 @@ class MemoryClient:
         self.quotes = quotes or {}
         self.fills = fills
         self.fill_index = 0
+        self.require_quotes = require_quotes
 
     def get_account(self):
         equity = self.cash + sum(float(p["qty"]) * self.prices[s] for s,p in self.positions.items() if float(p["qty"])>1e-8)
@@ -66,6 +67,8 @@ class MemoryClient:
         symbol, qty = request.symbol, float(request.qty)
         side = str(getattr(request.side,"value",request.side))
         quote = self.quotes.get(symbol, {})
+        if self.require_quotes and not quote:
+            raise RuntimeError("simulated fill requires a fresh observed quote")
         reference = float(quote.get("ask" if side=="buy" else "bid", self.prices[symbol]))
         price = reference * (1 + self.cost_bps/10000 * (1 if side=="buy" else -1))
         if self.fills is not None:
@@ -136,7 +139,7 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None,
     signal_day = datetime.fromisoformat(snapshot["signal_session"]).date()
     saved = []
     failure = None
-    client = MemoryClient(snapshot,prices,cost_bps=cost_bps,fills=fills)
+    client = MemoryClient(snapshot,prices,cost_bps=cost_bps,fills=fills,require_quotes=quotes is not None and fills is None)
     quote_indices={}
     pead_state = deepcopy(snapshot.get("pead_state", {"positions":{},"closed":[],"consumed_events":[]}))
     champions = {s:Champion(**v) for s,v in snapshot["champions"].items()}
@@ -159,6 +162,8 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None,
                 if index>=len(value):raise RuntimeError("extra quote request for "+symbol)
                 quote_indices[symbol]=index+1
                 value=value[index]
+            from ..market_tape import validate_quote
+            validate_quote(value,at=snapshot["at"])
             client.quotes[symbol]=value
             if "bid" in value and "ask" in value:
                 client.prices[symbol]=(float(value["bid"])+float(value["ask"]))/2

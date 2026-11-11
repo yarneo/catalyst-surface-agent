@@ -57,6 +57,7 @@ async function renderStrategy() {
         h("p.dim","Frozen "+(lab.frozen_at||"pending")+" · "+(lab.cohort||"pending")),
         h("p.dim","Forward sessions begin after "+(lab.forward_start_after||"the freeze date")+". An earlier opening price on the freeze date cannot count as a forward fill."),
         h("p.dim","Production rules run on observed minute quotes with modeled impact of 5bp and 25bp beyond the bid/ask. Missing minutes remain visible and their P&L is retained; they do not count as complete evidence."),
+        h("p.dim","Every fill needs a fresh quote. Existing BIL reserves may retain their last quoted value for valuation only. Last baseline session: "+(baseline?.latest_market_coverage?.missing_minutes||0)+" missing minutes · "+(baseline?.latest_market_coverage?.carried_bil_mark_minutes||0)+" BIL marks carried forward."),
         h("p",lab.next_action||"Awaiting first research run."))));
       if((baseline?.curve||[]).length>1) {
         const canvas=h("canvas");
