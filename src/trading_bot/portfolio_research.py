@@ -18,7 +18,7 @@ from .live.managed_futures_executor import idle_router_targets
 from .ownership import FACTOR_CAPS, factor_exposures, loading_of
 from .shadow_regime import propose_shadow_targets
 
-MODEL_VERSION = "portfolio-lab-v3-prospective"
+MODEL_VERSION = "portfolio-lab-v4-production-rules"
 
 
 @dataclass(frozen=True)
@@ -199,6 +199,9 @@ def forward_gate(candidate, baseline, *, parity, minimum_sessions=60):
         reasons += parity.get("blockers", ["production parity unproven"])
     if len(pairs) < minimum_sessions or len(blocks) < 12:
         reasons.append("at least 60 forward sessions and 12 independent weekly blocks required")
+    complete=sum(a.get("data_complete",False) and b.get("data_complete",False) for a,b in pairs)
+    if any("data_complete" in a for a,b in pairs) and complete < minimum_sessions:
+        reasons.append("at least 60 sessions with complete observed market coverage required; incomplete days remain in P&L")
     if lower is None or lower <= 0:
         reasons.append("cost-adjusted weekly excess lower bound is not positive")
     if performance(candidate).get("max_drawdown", 0) < performance(baseline).get("max_drawdown", 0) - .02:
@@ -207,7 +210,7 @@ def forward_gate(candidate, baseline, *, parity, minimum_sessions=60):
     if retired:
         reasons.append("retired: trailing 20-session excess below -3 percentage points")
     return {"eligible": not reasons, "status": "RETIRED" if retired else "ELIGIBLE_FOR_REPLAY_REVIEW" if not reasons else "COLLECTING",
-            "sessions": len(pairs), "weekly_blocks": len(blocks), "weekly_excess_lower_bound": lower,
+            "sessions": len(pairs), "complete_sessions":complete,"weekly_blocks": len(blocks), "weekly_excess_lower_bound": lower,
             "reasons": reasons, "order_authority": False}
 
 

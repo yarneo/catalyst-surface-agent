@@ -21,11 +21,11 @@ observations before any change in risk budget can be justified.
 | 8 | Projected limits | Cash and BIL reserves, gross/sleeve/position/factor caps, pending-order exclusion | Fill/mark drift monitoring |
 | 9 | Durable order identity | Pre-submission journal, deterministic client IDs, exclusive execution lock | Broker-response-loss recovery in service |
 | 10 | Durable state | Atomic fsync/replace, recoverable risk copy, missing/stale health blocks new allocation | Backup/restore checks continue |
-| 11 | Production-parity validation | Real orchestrator replay with simulated broker and network disabled; private input/bar archives; promotion gate | Full historical parity remains unproven; archived champion/health decisions cannot be invented |
+| 11 | Production-parity validation | Exact broker-tape replay plus independent simulated decisions, cash, shares, cost basis and risk-state comparison; network disabled | Five successful new opens including an order; costs and comparison tolerances must pass |
 | 12 | Equity and income reconciliation | Headline/curve use broker values; credited income counted once; yield model separated; benchmark dates aligned | Continue reconciliation |
 | 13 | Complete ledger | Paginated orders and fill activities; partial canceled fills included; quantities reconciled with broker | Corporate actions/transfers require explicit reconciliation if encountered |
 | 14 | Execution evidence | Full-fill denominator, uncovered fills exposed, venue quote capture and feed labels | Historical missing quotes cannot be backfilled as observations |
-| 15 | Whole-portfolio experiments | ETF, QLD, router, BIL and cash; following-open daily-bar proxy; costs, reserves and limits | Forward sample and production replay agreement |
+| 15 | Whole-portfolio experiments | Actual production orchestrator at observed minute quotes; ETF, QLD, router, BIL, cash and funded PEAD; persistent books, intraday guard, 5/25bp impact | Complete forward sample and production comparison agreement |
 | 16 | Attribution and benchmarks | QQQ routing beta separated from managed futures; broker marks/credited income; matched daily benchmark dates | Attribution is not a claim of alpha |
 | 17 | Truthful dashboard health | Completed cycle/supervisor freshness, exchange calendar, release time, next protection and rebalance | Monitor service freshness |
 | 18 | Credential isolation | Code allowlist, credential scan, private file permissions; old broad deployment path retired | Re-run scan each release |
@@ -35,7 +35,7 @@ observations before any change in risk budget can be justified.
 | 22 | Risk-budget comparison | Frozen baseline 70%, cap 60%, cap 50%, stress-aware 70%, risk-cap 25% experiments; upside capture and 5/25bp costs | Forward comparison; no budget changed |
 | 23 | Recovery rules | Frozen 1% hysteresis, two-session confirmation, five-session cooldown, three-session recovery experiments | Forward comparison |
 | 24 | Tail uncertainty | Asset coverage, tail sample count, bootstrap ES range, simultaneous-shock scenarios and crisis coverage gaps | Unseen crises remain uncertain |
-| 25 | Diversification tests | ETF-on/off comparison implemented; 10% PEAD slot and data-readiness checks; crypto stays disabled | **PEAD comparison needs timestamped earnings/entry evidence; not treated as a zero-return completed test** |
+| 25 | Diversification tests | ETF-on/off and funded PEAD implemented: 10% total, 5% per stock, two positions; shared cash/BIL funding, router and guard | New prospective earnings events and completed funded outcomes; no historical surprises or component P&L injected |
 | 26 | AI value evidence | Frozen model/prompt/strategy cohort, session deduplication and clustering, conservative costs/confidence gate | Independent changed sessions; target counterfactual remains distinct from broker P&L |
 | 27 | Options diagnostics | Rejection stages/classes, unique events, plan freshness, accepted virtual fills and completed outcomes | No invented P&L for candidates without executable quotes |
 | 28 | Promotion and retirement | Frozen cohort/input hashes, immutable forward observations, weekly-block evidence, excess-return retirement; legacy promotion path quarantined | At least 60 sessions / 12 weekly blocks plus verified parity; no candidate currently inherits order authority |
@@ -52,14 +52,15 @@ frozen for comparison. The old equal-third research model cannot promote
 portfolio policies. The write boundary independently rejects automatic
 promotion unless parity and frozen forward evidence are supplied.
 
-The new portfolio lab is a conditional daily-bar model, not a claim that every
-production trade has been reproduced. Its baseline includes actual deployed
-sleeves and caps, but historical ETF selection, historical health decisions,
-intraday stops and venue liquidity need separate evidence. A second harness
-executes the actual production orchestrator with archived inputs and an
-in-memory broker; this isolates decision-code discrepancies from fill-model
-assumptions. Exact signal frames and inputs begin accumulating at the next
-successful open under this release.
+Historical research remains a conditional daily-bar proxy. The v4 prospective
+lab instead executes the production orchestrator against isolated in-memory
+brokers, using frozen configuration, champion and allocation inputs, completed
+signal bars and subsequently observed minute quotes. Opening allocation runs at
+09:35 ET, funded PEAD entries at 09:40, and the production guard runs at each
+observed minute through the exchange close. Fills use observed bid/ask plus
+modeled adverse impact of 5bp or 25bp. Live execution probabilities and queue
+position remain unmodeled; the observed-cost comparison can reject these cost
+assumptions. All experiments remain without order authority.
 
 Forward experiments start from equal virtual capital after their freeze time.
 An intraday freeze excludes that session's already elapsed open. Model and
@@ -78,9 +79,9 @@ deployed risk budget or granting research candidates order authority:
 
 | Item | Can be finished now | What still needs observations |
 |---|---|---|
-| Exact production replay | Private broker request/response tape, input hashes, offline replay and risk-state comparison; tampering/changed-decision drills | Five distinct scheduled open sessions under the same engine, including at least one order request. This is an operational acceptance threshold, not statistical strategy evidence. |
-| Portfolio forward lab | Pre-open decision sealing; persistent virtual shares/cash; immutable closes; explicit split/dividend economics; gap detection | 60 new sessions and 12 weekly blocks, followed by cost/confidence and parity review. A Nov 12 start reaches session 60 on Feb 9, 2027 if no sessions are missed or model changes require a new cohort. |
-| Earnings drift (PEAD) | Timestamped forecast/result collector; completed reaction filter; subsequent fresh IEX quotes; separate virtual book and corporate-action checks | A forecast must be archived before a new reported result. Eligible entries then need a 60-session holding period. Downloaded old surprises cannot create prospective trades. |
+| Production/simulator comparison | Exact broker tape plus independent ledger and simulated decision cycle using observed fill prices; initial/final broker snapshots; quantity, basis, cash, risk and cost checks | Five distinct successful scheduled opens under the same engine, including at least one order request. Synthetic drills never enter these counts. |
+| Portfolio forward lab | Eleven production-rule variants at observed minute quotes; pre-open sealed inputs; persistent books; immutable closes; explicit corporate actions and gap detection | 60 complete new sessions and 12 weekly blocks; positive cost-adjusted excess at both 5/25bp assumptions and verified comparison. A Nov 12 start reaches session 60 on Feb 9, 2027 if no days are incomplete or model changes require a new cohort. |
+| Earnings drift (PEAD) | Prospective earnings collector integrated into a funded common-book sleeve; entry cost, cash/BIL funding, router interaction, 60-session exits and earlier portfolio protection | A forecast archived before a new result, a completed positive reaction, then a fresh next-session quote. At least one completed funded outcome plus all portfolio gates; cash-only results cannot qualify PEAD. |
 | Featherless availability | Detect capacity errors even inside HTTP 200; bounded requests; fixed backup pair only when primary votes are missing | Verify provider responses each planning cycle. Valid primary disagreement cannot trigger model shopping. Economic rejection still blocks a candidate even if the provider recovers. |
 | AI contribution | Frozen cohort, duplicate removal and session-level value/cost accounting | 30 independent sessions in which AI changes the target, with marked outcomes. Thirty ordinary calendar/trading days do not necessarily provide this. |
 | Options | Separate infrastructure/economic rejection, quote and lifecycle evidence | 30 independent completed eligible events with executable entry/exit evidence, plus calibration and positive cost-adjusted expectancy. Rejections without quotes have no invented P&L. |
@@ -92,20 +93,35 @@ remains conditional. The exact broker-tape replay verifies production code
 against what it actually requested and received; it does **not** independently
 validate broker marks or the daily-bar simulator's fill assumptions.
 
-The PEAD collector currently runs an isolated component book. Integrating its
-actual prospective path into the whole-portfolio allocation comparison, and
-validating candidate-specific production execution, remain separate engineering
-steps once usable inputs exist. The PEAD portfolio row stays `DATA_REQUIRED`;
-a flat or unobserved history must not be presented as a successful test.
+Simulator comparison and funded PEAD integration are implemented and tested;
+neither waits for future coding once inputs arrive. Exact broker replay is
+request-for-request. The independent fill ledger permits at most $0.05 cash
+discrepancy, 1e-7 shares and $0.01 average entry discrepancy. The simulated
+decision book uses a frozen 5bp-of-equity tolerance for mark-timing effects;
+risk flags must agree. Observed adverse impact beyond the venue bid/ask must
+fit the 25bp stress assumption. A failed comparison stays visible and prevents
+eligibility. These are operational tolerances, not a profitability guarantee.
+
+The PEAD portfolio row is `FORWARD_ONLY` for historical research; its prospective
+implementation is active. Forecast/result/reaction timestamps are validated at
+execution. Its 10% reserve reduces capital available to the other sleeves;
+entries release that reserve through the usual broker funding checks. Two
+cost books can hold different stocks and both are included in quote capture.
+Corporate actions update quantity, cost basis and income. Early risk exits
+become completed portfolio outcomes. The component collector remains diagnostic.
 
 Forward books fail visibly on a missed initial/intermediate session. Do not
 silently backdate an entry or restart only a losing candidate. Any recovery or
 new cohort must be recorded and applied consistently to the comparison family.
 
 Collection schedule: PEAD estimates before the open and after the close,
-virtual execution within 09:35–09:45 ET, forward plans before the open, and
-close settlement/replay verification after the close. The exchange calendar
-governs eligibility; repeated runs cannot create additional evidence.
+forward plans before the open, one-minute read-only quote capture from 09:35 ET
+through the actual exchange close, and settlement/comparison after the close.
+The component PEAD observer retains its 09:35–09:45 window. Research execution
+is reconstructed from the sealed observed tape; it cannot place broker orders.
+The exchange calendar handles holidays and half days. Missing opening quotes
+produce a no-entry day; missing minutes remain in the reported P&L but do not
+count as complete evidence. Repeated collection cannot rewrite observations.
 
 Collector failures return a failing process status for the existing scheduled
 job alerting path, as well as a visible dashboard state. Options calendar
@@ -123,6 +139,7 @@ Run `uv run pytest` for the default suite. Portfolio installations use
 - `scripts/portfolio_close.py`: report once after the actual exchange close.
 - `scripts/portfolio_lab.py`: frozen research; no order authority.
 - `scripts/portfolio_lab.py --prepare`: seal next decisions before that session opens.
+- `scripts/capture_research_market.py`: read-only minute quotes for the frozen research universe.
 - `scripts/verify_portfolio_replays.py`: compare captured production cycles offline.
 - `scripts/run_pead_shadow.py --phase collect|observe|close`: prospective earnings evidence and virtual fills only.
 - `scripts/portfolio_backup.py`: private backup plus temporary restoration/hash check.

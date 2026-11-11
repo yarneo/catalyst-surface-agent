@@ -57,7 +57,7 @@ from pathlib import Path
 from dataclasses import asdict
 
 from trading_bot.broker import AlpacaBroker
-from trading_bot.broker.evidence import capture_broker, capture_inputs, capture_cycle
+from trading_bot.broker.evidence import capture_broker, capture_inputs, capture_cycle, finish_capture
 from trading_bot.cycle import SessionState, plan_cycle
 from trading_bot.config import (
     load_crypto_universe,
@@ -358,6 +358,8 @@ def _run() -> None:
     from trading_bot.config import load_config
     capture_inputs(lambda: {"at":now_et().isoformat(),"signal_session":last_completed_session().isoformat(),
         "arguments":vars(args).copy(),"config":load_config(),"initial_state":asdict(state),
+        "cash":float(acct.cash),"last_equity":float(acct.last_equity),
+        "positions":{p.symbol:{"qty":float(p.qty),"avg_entry":float(p.avg_entry_price),"price":float(p.current_price)} for p in raw_positions},
         "champions":{s:c.as_dict() for s,c in store.all().items()}})
     plan = plan_cycle(
         phase=args.phase,
@@ -690,11 +692,13 @@ def main() -> None:
         try:
             _run()
         except BaseException as exc:
+            finish_capture()
             row.update(status="FAILED", completed_at=iso_now(), error_type=type(exc).__name__)
             atomic_json(status_path, state)
             append_record(DATA / "portfolio_cycles.jsonl", row)
             raise
         else:
+            finish_capture()
             signals = captured_signals()
             if phase == "open" and "--live" in sys.argv and signals:
                 path = DATA / "production_signals" / (now_et().date().isoformat() + ".json")

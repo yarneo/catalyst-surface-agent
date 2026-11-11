@@ -101,6 +101,7 @@ def capture_broker(broker):
     recorder=_RECORDER.get()
     if recorder is None:return broker
     recorder.metadata["initial_journal"]=broker.orders._load()
+    recorder.broker = broker
     broker._client=RecordingClient(broker._client,recorder)
     broker.orders.client=broker._client
     quote=broker.quote
@@ -113,6 +114,20 @@ def capture_inputs(factory):
     if recorder is not None:
         recorder.metadata.update(factory())
         atomic_json(recorder.folder/"metadata.json",recorder.metadata)
+
+
+def finish_capture():
+    """Archive final broker truth without changing the trading outcome."""
+    recorder=_RECORDER.get()
+    if recorder is None:return
+    try:
+        account=recorder.broker.get_account()
+        positions=recorder.broker.get_positions()
+        recorder.metadata["final_account"]={k:float(getattr(account,k)) for k in ("cash","portfolio_value","last_equity")}
+        recorder.metadata["final_positions"]={p.symbol:{"qty":float(p.qty),"avg_entry":float(p.avg_entry_price),
+            "price":float(p.current_price)} for p in positions}
+    except Exception as exc:
+        recorder.metadata["final_capture_error"]=type(exc).__name__
 
 
 def external(name,fn,*args,**kwargs):

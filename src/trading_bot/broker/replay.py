@@ -10,7 +10,8 @@ from contextlib import ExitStack, redirect_stdout
 from copy import deepcopy
 from dataclasses import asdict
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 import io
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -22,15 +23,18 @@ from .orders import OrderCoordinator
 
 
 class MemoryClient:
-    def __init__(self, snapshot, prices, *, cost_bps=5):
+    def __init__(self, snapshot, prices, *, cost_bps=5, quotes=None, fills=None):
         self.cash = float(snapshot["cash"])
         self.last_equity = float(snapshot["last_equity"])
         self.prices, self.cost_bps = prices, cost_bps
         self.positions = deepcopy(snapshot.get("positions", {}))
         self.orders = {}
+        self.quotes = quotes or {}
+        self.fills = fills
+        self.fill_index = 0
 
     def get_account(self):
-        equity = self.cash + sum(float(p["qty"]) * self.prices[s] for s,p in self.positions.items())
+        equity = self.cash + sum(float(p["qty"]) * self.prices[s] for s,p in self.positions.items() if float(p["qty"])>1e-8)
         return NS(cash=self.cash, equity=equity, portfolio_value=equity,
                   last_equity=self.last_equity, buying_power=max(0,self.cash))
 
@@ -61,10 +65,25 @@ class MemoryClient:
             return self.orders[request.client_order_id]
         symbol, qty = request.symbol, float(request.qty)
         side = str(getattr(request.side,"value",request.side))
-        price = self.prices[symbol] * (1 + self.cost_bps/10000 * (1 if side=="buy" else -1))
+        quote = self.quotes.get(symbol, {})
+        reference = float(quote.get("ask" if side=="buy" else "bid", self.prices[symbol]))
+        price = reference * (1 + self.cost_bps/10000 * (1 if side=="buy" else -1))
+        if self.fills is not None:
+            if self.fill_index >= len(self.fills):
+                raise RuntimeError("simulator requested an extra order")
+            fill = self.fills[self.fill_index]
+            self.fill_index += 1
+            if (symbol,side) != (fill["symbol"],fill["side"]):
+                raise RuntimeError("simulator order differs from the observed request")
+            price = fill["price"]
+            # Preserve the observed terminal fill fraction, including canceled
+            # partial fills. The decision quantity is still computed here.
+            qty *= fill["filled_qty"] / fill["qty"]
         existing = self.positions.get(symbol, {"qty":0, "avg_entry":price})
         old_qty = float(existing["qty"])
-        if side == "buy":
+        if qty <= 0:
+            pass
+        elif side == "buy":
             if qty*price > self.cash+.001:
                 raise RuntimeError("virtual purchase exceeded cash")
             self.cash -= qty*price
@@ -77,17 +96,32 @@ class MemoryClient:
             self.positions[symbol] = {"qty":max(0,old_qty-qty), "avg_entry":existing["avg_entry"]}
         order = NS(id=request.client_order_id, client_order_id=request.client_order_id,
                    symbol=symbol, side=side, status="filled", filled_qty=qty,
-                   filled_avg_price=price)
+                   filled_avg_price=price, qty=float(request.qty))
+        if self.fills is not None:
+            order.status = fill.get("status", "filled")
         self.orders[request.client_order_id] = order
         return order
 
 
-def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None):
+@lru_cache(maxsize=2)
+def _runner(name):
+    import importlib.util
+    path = Path(__file__).resolve().parents[3] / "scripts/run_portfolio.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    return runner
+
+
+def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None,
+                 quotes=None, fills=None, experiment=None, pead_inputs=None,
+                 phase="open", externals=None, allow_failure=False):
     """Replay one archived open; neither broker access nor private writes exist."""
     import importlib.util
     import sys
     import requests
-    from .. import allocations, marketdata
+    import socket
+    from .. import allocations, marketdata, config, learning, ownership
     from ..learning import Champion
     from ..live.executor import ExecutorState, PaperExecutor
     from ..live import executor, regime_executor, managed_futures_executor, cash_park_executor
@@ -96,14 +130,15 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None):
 
     root = Path(__file__).resolve().parents[3]
     path = root / "scripts/run_portfolio.py"
-    spec = importlib.util.spec_from_file_location("isolated_portfolio_replay",path)
-    runner = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(runner)
+    runner = _runner("isolated_portfolio_replay")
     state = ExecutorState(**snapshot["state"])
     moment = datetime.fromisoformat(snapshot["at"]).astimezone(ET)
     signal_day = datetime.fromisoformat(snapshot["signal_session"]).date()
     saved = []
-    client = MemoryClient(snapshot,prices,cost_bps=cost_bps)
+    failure = None
+    client = MemoryClient(snapshot,prices,cost_bps=cost_bps,fills=fills)
+    quote_indices={}
+    pead_state = deepcopy(snapshot.get("pead_state", {"positions":{},"closed":[],"consumed_events":[]}))
     champions = {s:Champion(**v) for s,v in snapshot["champions"].items()}
     def load_state(*args, **kwargs):
         return deepcopy(saved[-1] if saved else state)
@@ -116,6 +151,18 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None):
             raise marketdata.PriceUnavailable("replay history too short")
         return out
     def quote(symbol):
+        if quotes is not None:
+            if symbol not in quotes:raise RuntimeError(symbol+": observed quote is missing")
+            value=quotes[symbol]
+            if isinstance(value,list):
+                index=quote_indices.get(symbol,0)
+                if index>=len(value):raise RuntimeError("extra quote request for "+symbol)
+                quote_indices[symbol]=index+1
+                value=value[index]
+            client.quotes[symbol]=value
+            if "bid" in value and "ask" in value:
+                client.prices[symbol]=(float(value["bid"])+float(value["ask"]))/2
+            return deepcopy(value)
         p=prices[symbol]
         return {"bid":p*(1-cost_bps/10000),"ask":p*(1+cost_bps/10000),
                 "at":snapshot["at"],"feed":"modeled_replay"}
@@ -126,25 +173,49 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None):
         broker.cash_reserve,broker.bil_reserve,broker.max_leverage=.02,.10,1.
         broker.quote=quote
         stack.enter_context(patch.object(runner,"AlpacaBroker",lambda:broker))
-        stack.enter_context(patch.object(runner,"ChampionStore",lambda:NS(path=path, all=lambda:champions, get=champions.get)))
+        store=lambda:NS(path=path, all=lambda:champions, get=champions.get)
+        stack.enter_context(patch.object(runner,"ChampionStore",store))
+        stack.enter_context(patch.object(learning,"ChampionStore",store))
+        if "config" in snapshot:
+            stack.enter_context(patch.object(config,"load_config",lambda:deepcopy(snapshot["config"])))
         stack.enter_context(patch.object(runner,"now_et",lambda:moment))
         stack.enter_context(patch.object(runner,"last_completed_session",lambda:signal_day))
         stack.enter_context(patch.object(executor,"now_et",lambda:moment))
         stack.enter_context(patch.object(ExecutorState,"load",side_effect=load_state))
         stack.enter_context(patch.object(ExecutorState,"save",save_state))
-        stack.enter_context(patch.object(PaperExecutor,"_recent_bars",lambda self,s:marketdata.completed_bars(frames[s],s)))
+        stack.enter_context(patch.object(PaperExecutor,"_recent_bars",lambda self,s:marketdata.completed_bars(
+            frames[s].loc[str(moment.date()-timedelta(days=self.lookback_days)):],s)))
         stack.enter_context(patch.object(allocations,"read_allocations",lambda **kw:snapshot["allocations"]))
         stack.enter_context(patch.object(runner,"load_policy",lambda:snapshot["policy"]))
         stack.enter_context(patch.object(marketdata,"close_series",series))
         stack.enter_context(patch.object(executor,"append_ai_decision",lambda *a,**kw:None))
         stack.enter_context(patch.object(executor,"read_jsonl",lambda *a,**kw:[]))
         stack.enter_context(patch.object(regime_executor,"record_shadow_portfolios",lambda *a,**kw:{}))
+        if externals:
+            from ..signals.overlay import SignalOverlay
+            from .evidence import decode
+            overlay={r["args"][0]:decode(r["result"]) for r in externals if r["method"]=="overlay" and "result" in r}
+            authority=next((decode(r["result"]) for r in externals if r["method"]=="ai_authority" and "result" in r),None)
+            if overlay:stack.enter_context(patch.object(SignalOverlay,"apply",lambda self,s,w:deepcopy(overlay[s])))
+            if authority:stack.enter_context(patch.object(executor,"ai_authority_gate",lambda *a,**kw:deepcopy(authority)))
+        if experiment is not None:
+            from ..simulation_policy import configure_experiment
+            configure_experiment(stack,runner,broker,experiment,frames,pead_state,pead_inputs,moment)
         for module in (regime_executor,managed_futures_executor,cash_park_executor):
             stack.enter_context(patch.object(module,"send_telegram",lambda *a,**kw:None))
         stack.enter_context(patch("trading_bot.broker.alpaca_client.append_execution_intent",lambda *a,**kw:None))
         stack.enter_context(patch.object(runner,"atomic_json",lambda *a,**kw:None))
         stack.enter_context(patch.object(requests.sessions.Session,"request",side_effect=RuntimeError("network disabled in replay")))
-        argv=[str(path),"--phase","open","--live","--no-enrich"]
+        stack.enter_context(patch.object(socket.socket,"connect",side_effect=RuntimeError("network disabled in replay")))
+        argv=[str(path),"--phase", "risk" if phase=="pead" else phase,"--live"]
+        if not externals or snapshot.get("arguments",{}).get("no_enrich",True):argv.append("--no-enrich")
+        if experiment is not None and not experiment.etf:argv += ["--disable","etf"]
+        if experiment is not None and experiment.pead_weight:argv += ["--enable","pead"]
+        for name in ("enable","disable"):
+            selected=snapshot.get("arguments",{}).get(name,[])
+            if selected:argv += ["--"+name,*selected]
+        for name in ("skip_guard","wind_down_disabled"):
+            if snapshot.get("arguments",{}).get(name):argv.append("--"+name.replace("_","-"))
         for name in ("stop_loss","daily_loss_limit","max_drawdown","max_position_weight","target_vol","max_leverage"):
             if name in snapshot.get("arguments", {}):
                 argv += ["--"+name.replace("_","-"), str(snapshot["arguments"][name])]
@@ -153,11 +224,25 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None):
             stack.enter_context(patch.object(evidence,"DATA",Path(capture_to)))
         with marketdata.signal_session(signal_day):
             with evidence.capture_cycle(capture_to is not None,root):
-                runner._run()
+                try:
+                    runner._run()
+                except Exception as exc:
+                    failure = type(exc).__name__
+                    if not allow_failure:
+                        if capture_to is not None:evidence.finish_capture()
+                        raise
+                current_state = saved[-1] if saved else state
+                if (phase=="pead" and failure is None and not current_state.halted_today
+                        and not current_state.killed and not client.orders):
+                    from ..simulation_policy import execute_pead
+                    broker.bind_cycle(moment.date().isoformat()+":pead")
+                    execute_pead(broker,pead_state,pead_inputs,experiment.pead_weight,moment)
+                if capture_to is not None:
+                    evidence.finish_capture()
     account=client.get_account()
     return {"orders":[vars(o) for o in client.orders.values()], "cash":account.cash,
             "equity":account.portfolio_value,"positions":client.positions,
-            "state":asdict(saved[-1] if saved else state),
+            "state":asdict(saved[-1] if saved else state),"pead_state":pead_state,"error_type":failure,
             "network_access":False,"order_authority":False,
             "engine":"production_orchestrator","fill_model":f"{cost_bps}bp modeled venue quotes"}
 
@@ -251,7 +336,13 @@ def verify_recorded_cycle(folder):
             elif value is not None:argv += [option,str(value)]
         stack.enter_context(patch.object(sys,"argv",argv))
         try:
-            with marketdata.signal_session(signal_day):runner._run()
+            try:
+                with marketdata.signal_session(signal_day):runner._run()
+            except BaseException as exc:
+                error=exc
+            if "final_account" in meta:
+                broker.get_account()
+                broker.get_positions()
             client.assert_finished()
         except BaseException as exc:
             error=exc
@@ -260,6 +351,9 @@ def verify_recorded_cycle(folder):
     expected=meta.get("final_state",meta["initial_state"])
     different=[k for k in expected if k!="updated_at" and actual.get(k)!=expected[k]]
     status="MATCHED" if error is None and not different and meta["status"]=="COMPLETED" else "MISMATCH"
+    if (meta["status"]=="FAILED" and error is not None and type(error).__name__==meta.get("error_type")
+            and not different and client.index==len(rows) and not isinstance(error,ReplayMismatch)):
+        status="MATCHED_FAILED_EXECUTION"
     if status=="MATCHED" and not same_engine:status="MATCHED_CHANGED_ENGINE"
     return {"status":status,"session":str(moment.date()),"cycle":folder.name,
         "engine_hash":meta.get("engine_hash"),"same_engine":same_engine,

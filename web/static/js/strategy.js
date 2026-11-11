@@ -12,24 +12,33 @@ async function renderStrategy() {
       const pct=v=>v==null?"—":(v*100).toFixed(2)+"%";
       const candidates=lab.candidates||[];
       const replay=lab.production_verification||{},pead=lab.pead_collection||{};
+      const comparison=replay.simulator_comparison||{},market=lab.market_collection||{};
+      const fundedPead=candidates.find(r=>r.name==="pead_10pct")||{};
       const baseline=candidates.find(r=>r.name==="baseline_70");
       body.appendChild(h("div.section",h("div.card.card-pad",
         sectionHead("What is ready, and what needs time?","Collectors run automatically. Sample thresholds allow review; they do not establish a profitable strategy."),
+        h("p",lab.engineering?.status==="READY"
+          ? "Simulator comparison and funded PEAD integration are implemented. The remaining gates need observed trading data and successful validation."
+          : "Checking implementation readiness…"),
         buildTable([
           {h:"Evidence",cell:r=>r[0]},{h:"Progress",cell:r=>r[1]},{h:"What happens next",cell:r=>r[2]},
         ],[
           ["Production replay",(replay.matching_sessions||[]).length+" / 5 open sessions",
-            replay.status+" · "+(replay.verified_order_requests||0)+" order requests verified; requires at least one order"],
-          ["Portfolio experiments",(baseline?.forward?.observations||0)+" / 60 sessions",
+            (replay.status||"Awaiting capture")+" · "+(replay.verified_order_requests||0)+" order requests verified; requires at least one order"],
+          ["Independent simulator comparison",(comparison.matching_sessions||[]).length+" / 5 open sessions",
+            (comparison.status||"Awaiting capture")+" · compares cash, shares, cost basis, risk state and observed execution costs"],
+          ["Portfolio experiments",(baseline?.promotion?.complete_sessions||0)+" / 60 complete sessions · "+(baseline?.forward?.observations||0)+" total",
             (lab.forward_collection?.status||"Awaiting collector")+" · 12 weekly blocks, costs and parity also required"],
+          ["Minute quote collection",market.status||"Awaiting first session",
+            (market.stale?"STALE · ":"")+(market.at?"Last check "+new Date(market.at).toLocaleString():"Begins at 09:35 ET; follows the exchange close")],
           ["AI contribution",(ai.independent_changed_sessions||0)+" / 30 changed sessions",
             "Only sessions where AI changes the target count; repeated calls add no evidence"],
           ["Options",(options.promotion_evidence?.independent_outcomes||0)+" / 30 completed events",
             "Needs an eligible event, executable quotes and a completed exit"],
-          ["Earnings drift (PEAD)",(pead.forecast_events||0)+" archived forecasts · "+(pead.open_positions||0)+" virtual positions",
-            (pead.stale?"STALE":pead.status||"Awaiting collector")+" · "+(pead.completed_outcomes||0)+" completed outcomes; each hold lasts 60 sessions"],
+          ["Funded earnings drift (PEAD)",(pead.forecast_events||0)+" archived forecasts · "+(fundedPead.pead_open_positions||0)+" portfolio positions",
+            (pead.stale?"STALE":pead.status||"Awaiting collector")+" · "+(fundedPead.pead_completed_outcomes||0)+" completed portfolio outcomes; up to 60 sessions, with earlier risk exits"],
         ]),
-        h("p.dim","PEAD is a separate virtual book until its allocation comparison is validated. Missing historical health decisions and venue quotes cannot be recreated by waiting."),
+        h("p.dim","PEAD uses up to 10% of the same virtual portfolio, at most 5% per stock and two stocks. Entries are funded from cash and BIL; the router and risk guard see those holdings. Its component-only collector is diagnostic and is not added to portfolio P&L."),
         h("p",lab.report_stale?"Research report is behind the latest completed session.":"Research report covers the latest completed session."),
         h("p.dim","PEAD last observation: "+(pead.at||"pending")+" · feed problems: "+Object.keys(pead.feed_errors||{}).join(", ")))));
       body.appendChild(h("div.callout.info",h("span",
@@ -41,11 +50,13 @@ async function renderStrategy() {
           {h:"Experiment",cell:r=>r.name.replaceAll("_"," ")},
           {h:"Sessions",cell:r=>String(r.forward?.observations||0)},
           {h:"Return",cell:r=>r.forward?.observations?pct(r.forward.return):"Collecting"},
+          {h:"Return at 25bp impact",cell:r=>r.forward_high_cost?.observations?pct(r.forward_high_cost.return):"Collecting"},
           {h:"Drawdown",cell:r=>pct(r.forward?.max_drawdown)},
           {h:"State",cell:r=>r.promotion?.status||r.status},
         ],candidates),
         h("p.dim","Frozen "+(lab.frozen_at||"pending")+" · "+(lab.cohort||"pending")),
         h("p.dim","Forward sessions begin after "+(lab.forward_start_after||"the freeze date")+". An earlier opening price on the freeze date cannot count as a forward fill."),
+        h("p.dim","Production rules run on observed minute quotes with modeled impact of 5bp and 25bp beyond the bid/ask. Missing minutes remain visible and their P&L is retained; they do not count as complete evidence."),
         h("p",lab.next_action||"Awaiting first research run."))));
       if((baseline?.curve||[]).length>1) {
         const canvas=h("canvas");

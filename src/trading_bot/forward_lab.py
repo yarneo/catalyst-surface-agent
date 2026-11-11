@@ -20,7 +20,7 @@ class ForwardEvidenceError(RuntimeError):
     pass
 
 
-def seal_decisions(folder, manifest, targets, symbols, *, at):
+def seal_decisions(folder, manifest, targets, symbols, *, at, execution=None, pead=None):
     now = datetime.fromisoformat(at)
     if now.tzinfo is None:
         raise ForwardEvidenceError("forward timestamps require a timezone")
@@ -34,11 +34,14 @@ def seal_decisions(folder, manifest, targets, symbols, *, at):
               "prepared_at": at, "signal_session": str(previous_session(now.date())),
               "symbols": sorted(symbols), "targets": targets,
               "method": "pre-open frozen decisions; subsequent daily open/close proxy; modeled costs"}
+    if execution is not None:
+        result.update(execution=execution,pead=pead,
+            method="pre-open frozen production rules; observed minute quotes; modeled spread/impact; common funded portfolio")
     result["plan_hash"] = fingerprint(result)
     path = Path(folder) / "decisions" / (result["session"] + ".json")
     if path.exists():
         old = json.loads(path.read_text())
-        if old["targets"] != targets or old["cohort"] != manifest["cohort"]:
+        if any(old.get(k)!=result.get(k) for k in result if k not in {"prepared_at","plan_hash"}):
             raise ForwardEvidenceError("an existing forward plan cannot be changed")
         return old
     atomic_json(path, result)
@@ -126,6 +129,12 @@ def settle_session(folder, manifest, plan, marks, *, observed_at):
     if str(first_day) <= manifest["start_after"]:
         first_day = calendar(day.year).next_session(str(first_day)).date()
     count = 0
+    production = "execution" in plan
+    if production:
+        from .portfolio_simulator import advance_production, market_tape, new_book
+        from .portfolio_research import EXPERIMENTS
+        tape=market_tape(folder,plan)
+        specs={spec.name:spec for spec in EXPERIMENTS}
     for cost_bps in (5,25):
         for name, targets in plan["targets"].items():
             path = Path(folder)/"observations"/str(cost_bps)/name/(plan["session"]+".json")
@@ -141,11 +150,16 @@ def settle_session(folder, manifest, plan, marks, *, observed_at):
             else:
                 if day != first_day:
                     raise ForwardEvidenceError("initial forward session was missed")
-                book = {"shares":{},"cash":100000.,"previous_equity":100000.,"peak":100000.,"killed":False}
-            after, row = advance(book,targets,marks,session=plan["session"],cost_bps=cost_bps)
+                book = new_book() if production else {"shares":{},"cash":100000.,"previous_equity":100000.,"peak":100000.,"killed":False}
+            diagnostics={}
+            if production:
+                after,row,diagnostics=advance_production(book,plan,marks,tape,specs[name],cost_bps)
+            else:
+                after, row = advance(book,targets,marks,session=plan["session"],cost_bps=cost_bps)
             atomic_json(path, {"cohort":manifest["cohort"], "plan_hash":plan["plan_hash"],
                 "observed_at":observed_at, "marks_hash":fingerprint(marks), "marks":marks,
                 "cost_bps":cost_bps, "book_before":book, "book_after":after, "row":row,
+                "execution":diagnostics,
                 "dividend_basis":"modeled cash on ex-date; distinct from broker credited income"})
             count += 1
     return count

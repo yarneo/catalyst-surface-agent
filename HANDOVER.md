@@ -35,14 +35,21 @@ or change dashboard access controls when deploying. Production replay inputs,
 signal bars, order journals, forward observations, backups and host schedules
 belong on the private runtime.
 
-The prospective evidence collectors seal research targets before each open,
-retain virtual holdings across sessions, and settle immutable raw-price closes.
-The production runner records a private broker-response tape for exact offline
-decision/risk-state replay. PEAD estimates must be observed before results;
-its separate quote-priced virtual book cannot place orders. The Strategy tab
-shows collection progress and distinguishes elapsed evidence from missing
-validation. Read the remaining-work table in the hardening register before
-claiming that more days alone make an experiment eligible for deployment.
+The v4 forward lab freezes production inputs before each open, captures actual
+minute quotes and runs the production orchestrator against persistent simulated
+broker books at 5/25bp impact beyond observed bid/ask. All eleven experiments are
+wired. PEAD owns a funded 10% sleeve (two stocks, 5% each) inside the common
+portfolio, with shared reserves, router allocation and protection. Its older
+component-only book is diagnostic and is never added to portfolio returns.
+
+Production tapes now include initial/final cash and positions. Exact request
+replay and an independent ledger/simulator comparison run automatically after
+the close. Five successful observed opens including an order are required;
+strategy review also requires 60 complete sessions, 12 weekly blocks, both cost
+assumptions, and positive evidence. PEAD additionally needs a completed funded
+outcome. Engineering is implemented; validation is pending actual observations.
+The Experiments tab reports both states. Missing quotes or failed comparisons
+remain explicit and cannot be fixed by silently relaxing the gates.
 
 ## Historical event deployment
 

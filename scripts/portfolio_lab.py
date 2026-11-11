@@ -18,6 +18,9 @@ from trading_bot.risk import VolatilityTargeted
 from trading_bot.runtime_state import DATA, atomic_json, append_record, execution_lock
 from trading_bot.sessions import last_completed_session, iso_now, now_et, session_bounds
 from trading_bot.strategies import REGISTRY
+from trading_bot.config import load_config
+from trading_bot.broker.evidence import engine_fingerprint
+from trading_bot.portfolio_simulator import frame_data, VERSION as SIMULATOR_VERSION
 
 
 def run():
@@ -45,10 +48,11 @@ def context():
     # Reporting/transport repairs must not restart a trading-model cohort.
     source_paths = [Path(__file__).resolve(), *(root / "src/trading_bot" / p for p in
         ("portfolio_research.py", "forward_lab.py", "shadow_regime.py", "ownership.py",
-         "live/managed_futures_executor.py", "risk/sizing.py")),
+         "live/managed_futures_executor.py", "risk/sizing.py", "portfolio_simulator.py", "simulation_policy.py", "pead_shadow.py")),
         *sorted((root / "src/trading_bot/strategies").glob("*.py"))]
     source_hash = fingerprint([(p.relative_to(root).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest()) for p in source_paths])
-    cohort_config = {"model": MODEL_VERSION, "policy": policy["config"],
+    cohort_config = {"model": MODEL_VERSION,"simulator":SIMULATOR_VERSION,"engine_hash":engine_fingerprint(root),
+                     "runtime_config":load_config(), "policy": policy["config"],
                      "source_hash": source_hash,
                      "champions": {s: c.as_dict() for s,c in champions.items()},
                      "experiments": [asdict(x) for x in EXPERIMENTS], "cost_bps": [5, 25]}
@@ -59,6 +63,7 @@ def context():
     else:
         manifest = freeze_manifest(cohort, cohort_config, end)
         atomic_json(manifest_path, manifest)
+    atomic_json(folder/"active_cohort.json",{"cohort":cohort,"start_after":manifest["start_after"]})
     return folder, end, policy, champions, cohort, manifest
 
 
@@ -95,8 +100,25 @@ def prepare():
         targets = {spec.name:target_weights(
             regime_on=bool(regime_states(qqq,sma,spec)[-1]), qqq_vol=vol, verdict=verdict,
             etf_targets=etf.iloc[-1].to_dict(), spec=spec, policy=policy["config"])
-            for spec in EXPERIMENTS if not spec.pead_weight}
-        plan = seal_decisions(folder/"cohorts"/cohort, manifest, targets, closes.columns, at=iso_now())
+            for spec in EXPERIMENTS}
+        # Targets are descriptive diagnostics. Execution uses the frozen real
+        # orchestrator inputs and observed quotes, not this approximate vector.
+        pead_state=json.loads((DATA/"pead_shadow/state.json").read_text())
+        collected=datetime.fromisoformat(pead_state["last_collection_at"])
+        if (now-collected).total_seconds()>86400 or pead_state.get("collection_errors"):
+            raise ForwardEvidenceError("fresh, complete PEAD collection required before freezing")
+        symbols=set(closes.columns)-{"SPY"} if "SPY" not in champions else set(closes.columns)
+        symbols |= {e["symbol"] for e in pead_state["events"].values()
+                    if e["status"]=="PREQUALIFIED" and e.get("entry_session")==str(now.date())}
+        for cost in (5,25):
+            for prior in observations(folder/"cohorts"/cohort,"pead_10pct",cost)[-1:]:
+                symbols |= {s for s,p in prior["book_after"]["positions"].items() if float(p["qty"])>1e-8}
+        execution={"frames":frame_data({s:f.tail(600) for s,f in frames.items()}),
+            "config":load_config(),"champions":{s:c.as_dict() for s,c in champions.items()},
+            "allocations":allocation,"policy":policy,"arguments":{"no_enrich":True},"version":SIMULATOR_VERSION}
+        pead={"events":pead_state["events"],"collected_at":pead_state["last_collection_at"],"frozen_at":iso_now(),
+              "base_bil_buffer":policy["config"]["bil_buffer"]}
+        plan = seal_decisions(folder/"cohorts"/cohort, manifest, targets, symbols, at=iso_now(),execution=execution,pead=pead)
         print(json.dumps({"status":"PREOPEN_FROZEN", "session":plan["session"], "cohort":cohort,
                           "candidates":len(targets), "order_authority":False}))
 
@@ -137,18 +159,18 @@ def _run():
     for line in health_log.read_text().splitlines():
         row = json.loads(line)
         health.loc[health.index >= pd.Timestamp(row["signal_session"])] = row["regime_verdict"]
-    parity = {"passed": False, "blockers": [
-        "historical ETF selection and health decisions lack a complete point-in-time archive",
-        "daily-bar simulation does not reproduce intraday stops, quote availability or broker fills",
-        "full production replay must reconcile decisions and cash before promotion"],
-        "shared_rules": ["regime/volatility target", "router concentration rule", "sleeve/factor caps", "prior-close loss baseline"],
-        "legacy_proxy_quarantined": True}
+    comparison=verification.get("simulator_comparison",{})
+    parity = {"passed":verification["status"]=="VERIFIED" and comparison.get("status")=="VERIFIED",
+        "blockers":[] if verification["status"]=="VERIFIED" and comparison.get("status")=="VERIFIED" else
+            ["five distinct production opens with matching replay, independent simulator accounting and observed execution costs are required"],
+        "shared_rules":["actual production orchestrator", "actual portfolio guard at observed minute quotes", "funded PEAD adapter"],
+        "legacy_proxy_quarantined":True,"comparison":comparison}
     rows, by_name, high_cost = [], {}, {}
     benchmark = closes.QQQ.pct_change()
     for spec in EXPERIMENTS:
         history = simulate(opens, closes, etf, health, spec, policy["config"])
         if history is None:
-            rows.append({"name": spec.name, "status": "DATA_REQUIRED", "reason": "timestamped earnings surprises and executable PEAD entry/exit data required", "order_authority": False})
+            rows.append({"name": spec.name, "status": "FORWARD_ONLY", "reason": "historical PEAD inputs were not archived; funded forward execution is wired", "order_authority": False})
             continue
         stressed = simulate(opens, closes, etf, health, spec, policy["config"], cost_bps=25)
         by_name[spec.name] = history
@@ -167,14 +189,31 @@ def _run():
             collection.update(status="BLOCKED", reason=str(exc))
     elif str(end) > manifest["start_after"]:
         collection.update(status="BLOCKED", reason="completed session has no pre-open decision record")
-    forward = {name:[x["row"] for x in observations(forward_root,name)] for name in by_name}
+    forward = {spec.name:[x["row"] for x in observations(forward_root,spec.name)] for spec in EXPERIMENTS}
+    stressed_forward = {spec.name:[x["row"] for x in observations(forward_root,spec.name,25)] for spec in EXPERIMENTS}
+    if collection["status"]=="OBSERVED":
+        latest=[r[-1] for r in (*forward.values(),*stressed_forward.values()) if r]
+        if any(not r.get("data_complete",False) for r in latest):
+            collection.update(status="DATA_INCOMPLETE",reason="missing observed minutes; P&L retained, session excluded from complete-coverage count",
+                missing_minutes=max(r.get("missing_minutes",0) for r in latest))
     for row in rows:
-        if row["name"] not in by_name:
-            continue
         series = forward[row["name"]]
         row["forward"] = performance(series)
-        row["forward_high_cost"] = performance([x["row"] for x in observations(forward_root,row["name"],25)])
+        row["forward_high_cost"] = performance(stressed_forward[row["name"]])
         row["promotion"] = forward_gate(series, forward["baseline_70"], parity=parity)
+        row["high_cost_gate"] = forward_gate(stressed_forward[row["name"]],stressed_forward["baseline_70"],parity=parity)
+        if not row["high_cost_gate"]["eligible"]:
+            row["promotion"]["eligible"]=False
+            if row["promotion"]["status"]=="ELIGIBLE_FOR_REPLAY_REVIEW":row["promotion"]["status"]="COLLECTING"
+            row["promotion"]["reasons"].append("25bp stress-cost comparison must also pass")
+        if row["name"]=="pead_10pct":
+            completed=series[-1].get("pead_completed_outcomes",0) if series else 0
+            row["pead_completed_outcomes"]=completed
+            row["pead_open_positions"]=series[-1].get("pead_open_positions",0) if series else 0
+            if not completed:
+                row["promotion"]["eligible"]=False
+                if row["promotion"]["status"]!="RETIRED":row["promotion"]["status"]="AWAITING_PEAD_OUTCOME"
+                row["promotion"]["reasons"].append("at least one completed funded PEAD outcome required; a cash-only sleeve cannot validate earnings drift")
         # Rebase only the displayed curve; forward returns remain unaltered.
         eq = 100000.
         row["curve"] = []
@@ -190,37 +229,17 @@ def _run():
         crises.append({"name":name, "status":"COVERED_PROXY" if sample else "UNAVAILABLE_FUND_HISTORY",
                        "metrics": performance(sample),
                        "qqq_return": float(qqq_window.iloc[-1]/qqq_window.iloc[0]-1) if len(qqq_window)>1 else None})
-    output = {"status":"DATA_BLOCKED" if collection["status"]=="BLOCKED" else "COLLECTING", "at":iso_now(), "as_of":str(end), "cohort":cohort,
+    output = {"status":"DATA_BLOCKED" if collection["status"] in {"BLOCKED","DATA_INCOMPLETE"} else "COLLECTING", "at":iso_now(), "as_of":str(end), "cohort":cohort,
               "frozen_at":manifest["frozen_at"], "forward_start_after":manifest["start_after"], "data_hash":data_hash, "parity":parity,
-              "method":"completed daily signals; following open; modeled 5/25bp costs; whole-portfolio proxy",
+              "method":"frozen production rules; observed 09:35 and subsequent minute quotes; funded PEAD at 09:40; 5/25bp impact",
+              "engineering":{"status":"READY","simulator":SIMULATOR_VERSION,"pead_integration":"FUNDED_COMMON_BOOK","remaining_implementation":[]},
               "candidates":rows, "historical_crises":crises,
               "forward_collection":collection,
               "production_verification":verification,
               "promotion_authority":False, "crypto_enabled":False,
-              "next_action":"collect frozen forward observations; resolve parity blockers before any promotion"}
-    snapshots = sorted((DATA / "production_inputs").glob("*.json"))
-    output["production_replay"] = {"status": "AWAITING_ARCHIVED_OPEN", "network_access": False}
-    if snapshots:
-        from trading_bot.broker.replay import replay_cycle
-        snapshot = json.loads(snapshots[-1].read_text())
-        session = pd.Timestamp(snapshot["at"]).tz_convert("America/New_York").date()
-        prices = {s: float(f.loc[str(session),"open"]) for s,f in frames.items() if str(session) in f.index.strftime("%Y-%m-%d")}
-        if set(frames) <= prices.keys():
-            try:
-                replay_frames = dict(frames)
-                signal_path = DATA / "production_signals" / snapshots[-1].name
-                if signal_path.exists():
-                    for symbol,raw in json.loads(signal_path.read_text())["bars"].items():
-                        replay_frames[symbol] = pd.DataFrame(raw["data"], columns=raw["columns"], index=pd.to_datetime(raw["index"]))
-                replay = replay_cycle(snapshot, replay_frames, prices)
-                atomic_json(folder / "production_replays" / snapshots[-1].name, replay)
-                output["production_replay"] = {"status":"MODELED_FILLS_REPLAYED", "session":str(session),
-                    "orders":len(replay["orders"]), "cash":replay["cash"], "network_access":False,
-                    "limitation":"same decision code; modeled daily opens still require comparison to archived venue quotes and real fills"}
-            except Exception as exc:
-                output["production_replay"] = {"status":"FAILED", "error_type":type(exc).__name__, "network_access":False}
+              "next_action":"scheduled collectors supply real quotes and paper cycles; all comparison and integration paths are wired"}
     atomic_json(folder / "portfolio_lab.json", output)
-    print(json.dumps({"status":output["status"], "cohort":cohort, "candidates":len(rows), "as_of":str(end), "parity_passed":False}))
+    print(json.dumps({"status":output["status"], "cohort":cohort, "candidates":len(rows), "as_of":str(end), "parity_passed":parity["passed"]}))
     return output
 
 

@@ -1236,6 +1236,7 @@ def api_portfolio_lab():
     path = DATA / "research" / "portfolio_lab.json"
     result = json.loads(path.read_text()) if path.exists() else {"status": "AWAITING_FIRST_RUN"}
     for key, relative in (("pead_collection", "pead_shadow/summary.json"),
+                          ("market_collection", "research/market_health.json"),
                           ("production_verification", "research/production_verification.json")):
         source = DATA / relative
         result[key] = json.loads(source.read_text()) if source.exists() else {"status": "AWAITING_FIRST_RUN"}
@@ -1246,6 +1247,13 @@ def api_portfolio_lab():
     stamp = result["pead_collection"].get("at")
     if stamp:
         result["pead_collection"]["stale"] = (datetime.now(timezone.utc)-datetime.fromisoformat(stamp)).total_seconds()>4*86400
+    from trading_bot.sessions import now_et, session_bounds
+    moment=now_et()
+    bounds=session_bounds(moment.date())
+    market=result["market_collection"]
+    if bounds and bounds[0]+timedelta(minutes=7)<=moment<bounds[1]:
+        stamp=market.get("at")
+        market["stale"]=not stamp or (moment-datetime.fromisoformat(stamp)).total_seconds()>120
     return result
 
 
