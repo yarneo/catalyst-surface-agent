@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict
 import hashlib
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import pandas as pd
 from trading_bot.allocations import read_allocations
@@ -23,6 +24,14 @@ def run():
         return _run()
 
 
+def freeze_manifest(cohort, config, end, at=None):
+    at = at or iso_now()
+    frozen_day = datetime.fromisoformat(at).astimezone(ZoneInfo("America/New_York")).date()
+    # An intraday freeze cannot claim the already elapsed opening fill as a
+    # forward observation. Start after the entire freeze session.
+    return {"cohort": cohort, "frozen_at": at, "start_after": str(max(end, frozen_day)), **config}
+
+
 def _run():
     folder = DATA / "research"
     folder.mkdir(parents=True, exist_ok=True)
@@ -31,8 +40,11 @@ def _run():
     if policy["status"] == "INVALID_FALLBACK":
         raise RuntimeError("invalid live policy")
     champions = ChampionStore().all()
+    root = Path(__file__).resolve().parents[1]
+    source_paths = [Path(__file__).resolve(), *sorted((root / "src/trading_bot").rglob("*.py"))]
+    source_hash = fingerprint([(p.relative_to(root).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest()) for p in source_paths])
     cohort_config = {"model": MODEL_VERSION, "policy": policy["config"],
-                     "source_hash": hashlib.sha256((Path(__file__).resolve().parents[1] / "src/trading_bot/portfolio_research.py").read_bytes()).hexdigest(),
+                     "source_hash": source_hash,
                      "champions": {s: c.as_dict() for s,c in champions.items()},
                      "experiments": [asdict(x) for x in EXPERIMENTS], "cost_bps": [5, 25]}
     cohort = fingerprint(cohort_config)
@@ -40,7 +52,7 @@ def _run():
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
     else:
-        manifest = {"cohort": cohort, "frozen_at": iso_now(), "start_after": str(end), **cohort_config}
+        manifest = freeze_manifest(cohort, cohort_config, end)
         atomic_json(manifest_path, manifest)
     symbols = sorted(set(champions) | {"QQQ", "QLD", "DBMF", "KMLM", "BIL", "SPY"})
     frames = {s: load_ohlcv(s, "2006-01-01", str(end + timedelta(days=1))) for s in symbols}
@@ -126,7 +138,7 @@ def _run():
                        "metrics": performance(sample),
                        "qqq_return": float(qqq_window.iloc[-1]/qqq_window.iloc[0]-1) if len(qqq_window)>1 else None})
     output = {"status":"COLLECTING", "at":iso_now(), "as_of":str(end), "cohort":cohort,
-              "frozen_at":manifest["frozen_at"], "data_hash":data_hash, "parity":parity,
+              "frozen_at":manifest["frozen_at"], "forward_start_after":manifest["start_after"], "data_hash":data_hash, "parity":parity,
               "method":"completed daily signals; following open; modeled 5/25bp costs; whole-portfolio proxy",
               "candidates":rows, "historical_crises":crises,
               "promotion_authority":False, "crypto_enabled":False,

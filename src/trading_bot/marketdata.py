@@ -137,7 +137,9 @@ def last_close_and_sma(symbol: str, sma_n: int, period: str | None = None) -> tu
     Requires ``sma_n`` usable bars, so the SMA is never computed over a window
     padded with NaN — the other way this filter can silently return garbage.
     """
-    period = period or f"{sma_n + 60}d"
+    # Provider periods count calendar days, while the SMA needs trading
+    # sessions. 260 calendar days cannot supply a 200-session window.
+    period = period or f"{sma_n * 2 + 60}d"
     closes = close_series(symbol, period=period, min_bars=sma_n)
     sma = float(closes.rolling(sma_n).mean().iloc[-1])
     last = float(closes.iloc[-1])

@@ -48,9 +48,7 @@ async function loadLive() {
   const equity = acct.equity;
   const last_eq = acct.last_equity;
   const cash = acct.cash;
-  // "Invested" must be computed from price-only equity (equity_raw): `equity`
-  // includes simulated BIL income (cash-like), which otherwise shows up as
-  // phantom "invested" capital and grows forever (~$2k/yr at ~$40k BIL).
+  // Both equity fields are unadjusted broker equity; cash is not invested.
   const invested = (acct.equity_raw != null ? acct.equity_raw : equity) - cash;
   const total_pl = equity - 100000;
   const day_pl = equity - last_eq;
@@ -63,7 +61,7 @@ async function loadLive() {
   // entirely until 2026-08-04. PEAD retired 2026-06-26.
   const sleeveOrder = [
     { key: "etf", name: "ETF mean-reversion",
-      bodyHealthy: "Trades short-term mean-reversion across the liquid ETF universe, but only on symbols whose strategy cleared the Deflated-Sharpe gate — the discount applied for how many configurations were searched. Symbols that fail the gate are not traded at all, and a champion that stops clearing it is retired and its position closed.",
+      bodyHealthy: "Trades the deployed ETF champions using their quant signals and volatility limits. Champion selection is frozen during the forward comparison. Retraining produces proposals; it cannot silently replace these strategies.",
       bodyDecaying: "Same rule. Fewer symbols are clearing the Deflated-Sharpe gate than before — the sleeve trades less as the evidence thins.",
       bodyTripped:  "No symbol currently clears the Deflated-Sharpe gate, so the sleeve is holding nothing. That is the design working, not a failure." },
     { key: "mf", name: "Idle router / managed futures",

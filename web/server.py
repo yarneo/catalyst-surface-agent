@@ -341,15 +341,10 @@ def _total_sim_div_to(target_iso: str) -> float:
 
 @_ttl_cache(120)
 def equity_curve_snapshot() -> list[dict]:
-    """Alpaca portfolio-history with corrections:
-      - Drop leading zero-equity rows (Alpaca pads days before account existed).
-      - Each bar is timestamped at 04:00 UTC of the day AFTER market close —
-        we convert to ET and use the prior date so Mon's close shows as "Mon".
-      - Splice the live `account.equity` as a synthetic latest point whenever
-        portfolio_history hasn't caught up (it lags by ~1 trading day). The
-        date label is the most recent COMPLETED trading session — on a
-        weekend that's last Friday, not today (which would create a phantom
-        Sat/Sun bar and hide the actual session's move).
+    """Broker daily equity, labeled in ET and restricted to completed sessions.
+
+    Leading padded zero rows are removed. Live account marks and modeled
+    income are never inserted into the historical closing series.
     """
     from zoneinfo import ZoneInfo
     from alpaca.trading.requests import GetPortfolioHistoryRequest
@@ -382,18 +377,11 @@ def equity_curve_snapshot() -> list[dict]:
 
 @_ttl_cache(600)
 def regime_snapshot(sma_n: int = 200) -> dict | None:
-    import yfinance as yf
+    from trading_bot.marketdata import close_series, PriceUnavailable
     try:
-        hist = yf.Ticker("QQQ").history(period=f"{sma_n + 60}d", auto_adjust=True)
-        # Drop rows where Close is NaN — yfinance can serve a row for the
-        # current trading session with NaN Close while the day is still open,
-        # which contaminates the rolling SMA and makes the last value NaN.
-        hist = hist.dropna(subset=["Close"])
-    except Exception:
+        closes = close_series("QQQ", period=f"{sma_n * 2 + 60}d", min_bars=sma_n)
+    except PriceUnavailable:
         return None
-    if hist.empty or len(hist) < sma_n:
-        return None
-    closes = hist["Close"]
     sma = closes.rolling(sma_n).mean()
     # Restrict to rows with a VALID SMA before comparing. `close > NaN` is
     # False, so the first sma_n-1 rows read as "below the SMA" and a long

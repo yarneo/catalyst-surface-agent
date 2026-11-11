@@ -23,6 +23,7 @@ async function renderStrategy() {
           {h:"State",cell:r=>r.promotion?.status||r.status},
         ],candidates),
         h("p.dim","Frozen "+(lab.frozen_at||"pending")+" · "+(lab.cohort||"pending")),
+        h("p.dim","Forward sessions begin after "+(lab.forward_start_after||"the freeze date")+". An earlier opening price on the freeze date cannot count as a forward fill."),
         h("p",lab.next_action||"Awaiting first research run."))));
       const baseline=candidates.find(r=>r.name==="baseline_70");
       if((baseline?.curve||[]).length>1) {

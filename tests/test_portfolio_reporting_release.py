@@ -123,6 +123,24 @@ def test_cache_arguments_are_independent():
     assert f(500) == 500
 
 
+def test_dashboard_regime_uses_completed_window(monkeypatch):
+    import pandas as pd
+    from web import server
+    from trading_bot import marketdata
+    end = pd.Timestamp("2026-11-10")
+    idx = pd.bdate_range(end - pd.Timedelta(days=460), end)
+    frame = pd.DataFrame({"Close": 100.0}, index=idx)
+    frame.loc[end, "Close"] = 110.0
+    frame.loc[end + pd.Timedelta(days=1), "Close"] = 1.0
+    monkeypatch.setattr(marketdata, "last_completed_session", lambda: end.date())
+    monkeypatch.setattr(marketdata.yf, "Ticker", lambda _: NS(history=lambda **kw: frame))
+    server.regime_snapshot.cache_clear()
+    result = server.regime_snapshot()
+    assert result["as_of"] == "2026-11-10"
+    assert result["regime_on"]
+    assert result["close"] == 110
+
+
 def test_release_allowlist_excludes_secrets_and_mutable_data(tmp_path):
     from scripts.build_portfolio_release import release_files
     (tmp_path / "src/trading_bot/data").mkdir(parents=True)

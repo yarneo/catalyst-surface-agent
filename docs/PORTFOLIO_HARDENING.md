@@ -62,6 +62,8 @@ assumptions. Exact signal frames and inputs begin accumulating at the next
 successful open under this release.
 
 Forward experiments start from equal virtual capital after their freeze time.
+An intraday freeze excludes that session's already elapsed open. Model and
+runner source fingerprints are part of the immutable cohort identity.
 They do not import the historical model's ending positions or past profits.
 A change in model source, strategy selection or portfolio configuration creates
 a new cohort. Retired candidates cannot gain authority because they once had

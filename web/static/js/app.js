@@ -4,8 +4,8 @@
 (function () {
   const tabs = [
     { id: "live",     label: "Live",             render: renderLive,     live: true },
-    { id: "strategy", label: "Strategy vs Hold", render: renderStrategy },
-    { id: "crash",    label: "Crash perf",       render: renderCrash },
+    { id: "strategy", label: "Experiments",      render: renderStrategy },
+    { id: "crash",    label: "Risk & stress",    render: renderCrash },
   ];
 
   const page = $("#page");

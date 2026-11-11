@@ -117,6 +117,19 @@ def test_sma_requires_a_full_window(patch_yf):
         last_close_and_sma("QQQ", 200)
 
 
+def test_default_sma_request_spans_trading_sessions_not_calendar_days(monkeypatch):
+    end = pd.Timestamp("2026-11-10")
+    monkeypatch.setattr(marketdata, "last_completed_session", lambda: end.date())
+    class CalendarTicker:
+        def history(self, period, **kwargs):
+            idx = pd.bdate_range(end - pd.Timedelta(days=int(period[:-1])), end)
+            return pd.DataFrame({"Close": np.linspace(100, 120, len(idx))}, index=idx)
+    monkeypatch.setattr(marketdata.yf, "Ticker", lambda _: CalendarTicker())
+    price, sma = last_close_and_sma("QQQ", 200)
+    assert price == 120
+    assert 100 < sma < price
+
+
 def test_short_history_raises_after_nan_drop(patch_yf):
     """199 real bars + 1 NaN is NOT enough for a 200-day SMA."""
     patch_yf(_frame([100.0] * 199 + [np.nan]))

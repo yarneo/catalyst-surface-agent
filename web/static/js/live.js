@@ -33,7 +33,7 @@ async function renderLive() {
     /* ---- hero stat strip ---- */
     const strip = h("div.statstrip",
       h("div.stat",
-        h("div.stat-label", "Portfolio estimate"),
+        h("div.stat-label", "Broker account value"),
         h("div.stat-value", fmtUSD(s.portfolio)),
         h("div.stat-sub" + (s.portfolioPos ? ".pos" : ".neg"), s.portfolioSub)),
       h("div.stat",
@@ -201,7 +201,7 @@ async function renderLive() {
     } else {
       pvCanvas = h("canvas");
       pvCard = h("div.card.chart-card",
-        sectionHead("Portfolio value", "Account total since launch. The dotted line marks your $100k starting point."),
+        sectionHead("Portfolio value at completed sessions", "Broker daily history. Today's intraday value appears at the top; the dotted line marks the $100k funding baseline."),
         h("div.chart-box", { style: "height:240px" }, pvCanvas));
       ddCanvas = h("canvas");
       const lastDd = LIVE.dd[LIVE.dd.length - 1] || 0;
@@ -210,14 +210,14 @@ async function renderLive() {
       // measurably below its peak — an honesty bug, not a rounding nicety.
       const atATH = lastDd >= 0;
       ddCard = h("div.card.chart-card",
-        sectionHead("Distance from high",
+        sectionHead("Drawdown at completed sessions",
           atATH
             ? h("p.caption",
                 h("span.pos", "✓ At all-time high. "),
                 "This chart tracks how far below the peak we've been over time — at 0% the bot has never been worth more than it is right now.")
             : h("p.caption",
-                "How far below the peak you are right now — a tiny ", term("drawdown", "drawdown"),
-                `. Currently ${lastDd.toFixed(2)}%.`)),
+                "Decline from the historical closing peak: ", term("drawdown", "drawdown"),
+                ` ${lastDd.toFixed(2)}% as of ${LIVE.pvDates[LIVE.pvDates.length - 1]}. Today's mark is separate.`)),
         h("div.chart-box", { style: "height:170px" }, ddCanvas));
     }
 
@@ -277,13 +277,13 @@ async function renderLive() {
         : `${trajectoryPerWeek >= 0 ? "+" : ""}${trajectoryPerWeek.toFixed(2)} pts/week`;
       const cap = (lb != null && ls != null && lq != null)
         ? h("p.caption",
-            "Actual paper performance from deployment. Currently ",
+            `Matched closing observations through ${vs.dates[vs.dates.length - 1]}. Since the first chart observation: `,
             h("b", (lb - 100).toFixed(2) + "% ROI"),
             " vs S&P ",
             h("span", { class: (vsSpy >= 0 ? "pos" : "neg") }, (vsSpy >= 0 ? "+" : "") + vsSpy + "% pts"),
             ", vs NASDAQ ",
             h("span", { class: (vsQqq >= 0 ? "pos" : "neg") }, (vsQqq >= 0 ? "+" : "") + vsQqq + "% pts"),
-            ".")
+            ". The funded-account return at the top also includes today's intraday move.")
         : h("p.caption", "Cumulative ROI since deployment, with every series starting at 0%.");
       vsCard = h("div.card.chart-card",
         sectionHead("Deployment & ROI trajectory", cap),
@@ -291,10 +291,10 @@ async function renderLive() {
           h("div.kv", h("div.kv-k", "Deployed"),
             h("div.kv-v", deployedLabel),
             h("div.kv-cmp", `${calendarDays} calendar days · ${sessions} market sessions`)),
-          h("div.kv", h("div.kv-k", "Current ROI"),
+          h("div.kv", h("div.kv-k", "Completed-session ROI"),
             h("div.kv-v", { class: currentRoi >= 0 ? "pos" : "neg" },
               currentRoi == null ? "—" : `${currentRoi >= 0 ? "+" : ""}${currentRoi.toFixed(2)}%`),
-            h("div.kv-cmp", "net account trajectory")),
+            h("div.kv-cmp", `from first chart observation · ${vs.dates[vs.dates.length - 1]}`)),
           h("div.kv", h("div.kv-k", "Annualized pace"),
             h("div.kv-v", { class: annualized >= 0 ? "pos" : "neg" },
               annualized == null ? "—" : `${annualized >= 0 ? "+" : ""}${annualized.toFixed(1)}%`),
@@ -332,15 +332,6 @@ async function renderLive() {
     const incTotal = inc.total || 0;
     const incRecent = inc.recent || [];
     const bySymbol = inc.by_symbol || {};
-    // Estimate what BIL WOULD pay in a real account (paper Alpaca doesn't
-    // credit DIV/INT activities — confirmed empirically). 5% annualized is
-    // the SGOV/BIL SEC yield at the time of writing.
-    const bilPos = (LIVE.positions || []).find(p => p.sym === "BIL");
-    const bilMv = bilPos ? Number(bilPos.mvRaw || 0) : 0;
-    const BIL_APR = 0.05;
-    const estMonthly = bilMv * BIL_APR / 12;
-    const daysSinceLaunch = Math.max(1, (LIVE.pvDates || []).length);
-    const estToDate = bilMv * BIL_APR * daysSinceLaunch / 365;
     let incBody;
     if (incCount === 0) {
       incBody = h("div.callout.info", h("span", "No broker-credited income in the ledger yet. Headline equity and returns use broker values only."));
@@ -373,10 +364,7 @@ async function renderLive() {
     }
     const incomeCard = h("div.card.card-pad",
       sectionHead("💰 Dividend & interest income",
-        h("p.caption",
-          "Income credited to the account separately from trade P&L. Any ",
-          h("b", "BIL"),
-          " (Treasury-bill) holdings pay roughly 5% annualized; the figure below is computed from the actual BIL position, which is $0 when idle capital is fully routed. Paper-trading sometimes doesn't fully simulate dividends/corporate actions.")),
+        "Actual dividend and interest credits reported by the broker. These amounts are already included in account equity; no estimated yield is added."),
       h("div.mt-16", incBody)
     );
 
@@ -478,7 +466,7 @@ async function renderLive() {
       { h: "Status",   cell: r => h("span.t-status." + r.st, r.st) },
     ], LIVE.orders);
     const orderCard = h("div.card.card-pad",
-      sectionHead("Recent orders", "Every order the bot has placed lately. 'Canceled' usually means a better fill replaced it."),
+      sectionHead("Recent orders", "Broker order history. A cancellation does not establish that a replacement filled; partial fills remain in the reconciled ledger."),
       h("div.mt-16", LIVE.orders.length ? orderTable : h("p.dim", "No orders yet."))
     );
 
@@ -573,7 +561,7 @@ async function renderLive() {
     ], shadowVariants);
     const shadowCard = h("div.card.card-pad",
       sectionHead("QLD allocation laboratory",
-        "Five cost-adjusted virtual portfolios receive the same regime signal and price. Only the production strategy can submit orders."),
+        "An isolated QLD sleeve diagnostic with modeled costs. It excludes the other sleeves and cannot establish whole-portfolio improvement. The frozen portfolio experiments above perform that comparison."),
       shadowVariants.length ? h("div.mt-16", shadowTable,
         h("p.dim", { style: "margin-top:10px" },
           `${LIVE.shadowRegime.measured_observations || 0} measured sessions · close-to-close marking`))
@@ -638,6 +626,8 @@ async function renderLive() {
       ...(evCalendar.source_errors || []),
       ...(evCalendar.source_warnings || []),
     ];
+    const funnel = ev.rejection_funnel || {};
+    const rejectionRows = Object.entries(funnel.rejection_classes || {}).map(([name,count]) => ({name,count}));
     const eventShadowCard = h("div.card.card-pad",
       sectionHead("Event-options discovery",
         "Observation only. It scans scheduled catalysts, asks a Featherless committee to classify evidence, replays prior events, checks the live options surface, and books virtual fills. It has no broker order authority."),
@@ -670,7 +660,13 @@ async function renderLive() {
             ? evSourceIssues.join(" · ")
             : `${evProviders || "no candidates"} · ${Number(evCalendar.enriched_schedule_fact_count || 0)} news confirmations`)))
         : h("div.callout.info.mt-16", h("span.ci", "⏳"),
-            h("span", "The first weekly discovery plan has not run yet.")));
+            h("span", "The first weekly discovery plan has not run yet.")),
+      h("div.mt-16", sectionHead("Why candidates did not trade", funnel.interpretation || "Awaiting candidate evidence."),
+        h("p", `Plan: ${ev.plan_freshness?.status || "unknown"} · ${funnel.unique_rejected_events || 0} unique rejected events · ${funnel.valid_entries || 0} valid virtual entries · ${funnel.completed_outcomes || 0} completed outcomes`),
+        buildTable([
+          {h:"Reason class",cell:r=>r.name.replaceAll("_"," ")},
+          {h:"Events",cell:r=>String(r.count)}
+        ],rejectionRows)));
 
     const pr = LIVE.portfolioRisk || {};
     const riskReady = pr.status === "MEASURING";
@@ -689,7 +685,7 @@ async function renderLive() {
           h("div.kv-cmp", `${(Number(pr.worst_observed_fraction || 0) * 100).toFixed(2)}% replayed loss`)),
         h("div.kv", h("div.kv-k", "Evidence window"),
           h("div.kv-v", String(pr.observations || 0)),
-          h("div.kv-cmp", "aligned daily observations")))
+          h("div.kv-cmp", `${pr.tail_observations || 0} tail observations · ${pr.tail_reliability || "unverified"}`)))
         : h("div.callout.info.mt-16", h("span.ci", "⏳"),
             h("span", pr.reason || "Building enough aligned price history for the current holdings.")));
 

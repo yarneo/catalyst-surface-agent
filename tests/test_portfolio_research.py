@@ -38,6 +38,17 @@ def test_missing_pead_data_cannot_look_like_a_valid_zero_return_strategy():
     assert simulate(None,pd.DataFrame(),None,None,Experiment("pead",pead_weight=.1),DEFAULT_CONFIG) is None
 
 
+def test_intraday_freeze_cannot_reuse_an_open_that_already_happened():
+    from datetime import date
+    from scripts.portfolio_lab import freeze_manifest
+    manifest = freeze_manifest("example", {}, date(2025,11,10), at="2025-11-11T16:00:00+00:00")
+    idx = pd.bdate_range("2025-01-01", "2025-11-12")
+    prices = pd.DataFrame({s:np.linspace(100,130,len(idx)) for s in ("QQQ","QLD","DBMF","KMLM","BIL")}, index=idx)
+    result = simulate(prices, prices, pd.DataFrame(index=idx), pd.Series("HEALTHY",index=idx),
+                      Experiment("x"), DEFAULT_CONFIG, start_after=manifest["start_after"])
+    assert [row["date"] for row in result] == ["2025-11-12"]
+
+
 def test_even_profitable_history_cannot_bypass_parity_gate():
     baseline=[{"date":str(i),"return":0,"cost":0,"turnover":0} for i in range(100)]
     candidate=[{**r,"return":.001} for r in baseline]
