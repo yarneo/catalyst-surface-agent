@@ -37,6 +37,8 @@
       btn.tabIndex = btn.dataset.id === id ? 0 : -1;
     });
     history.replaceState(null, "", "#" + id);
+    window.scrollTo({top:0,behavior:"instant"});
+    b.node._onActivate?.();
   }
 
   // build nav

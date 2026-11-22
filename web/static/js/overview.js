@@ -44,7 +44,7 @@ async function renderOverview() {
     h("div.section", chartCard),
     h("div.section.overview-columns", holdings, strategies),
     h("p.overview-footnote", "Want the full record? ", h("a", {href: "#crash"}, "Open trade history, risk checks and diagnostics →")));
-  let pending = false, chart = null, chartMode = "account", performance = null, benchmark = null;
+  let pending = false, chart = null, chartMode = "account", performance = null, benchmark = null, refreshedAt = 0;
   let chartRequest = 0;
 
   async function drawChart() {
@@ -191,10 +191,12 @@ async function renderOverview() {
     updated.textContent = (stale?"Older account snapshot · ":"Account snapshot · ")+ (observed?Dashboard.time(observed):"unavailable")+
       (results.some(r=>r.status==="rejected")?" · Some data unavailable. Refresh to retry.":" · Refreshes every minute while this tab is visible.");
     updated.classList.toggle("amber",Boolean(stale));
+    refreshedAt = Date.now();
     pending = false; refresh.disabled = false; refresh.textContent = "Refresh";
     await Promise.all([researchReady,accountingReady]);
   }
   refresh.addEventListener("click",refreshOverview);
+  root._onActivate = ()=>{if(Date.now()-refreshedAt>=60000)refreshOverview();};
   root._asyncReady = refreshOverview();
   setInterval(()=>{if(root.classList.contains("active")&&!document.hidden)refreshOverview();},60000);
   return root;
