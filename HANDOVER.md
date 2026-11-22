@@ -60,6 +60,12 @@ gaps remain a data-access limitation, not a claim that more days alone will fix
 the lab. Explicit whole-family continuation retains every virtual book and open
 PEAD position across this repair; see the hardening register for the command.
 
+Research inputs now expose news availability, grounded Featherless assessments
+and quote-feed entitlement separately from outcomes. ETF sector context is
+explicitly labelled; model failures are not neutral votes. Execution, the
+portfolio lab and PEAD share automatic SIP/IEX routing with unchanged freshness
+limits. See the research-input section of the hardening register.
+
 The private portfolio dashboard now opens on **Overview**: account value,
 last-session and five-session changes, current holdings, strategy status and
 the next scheduled checks. Closed-market day changes come from completed

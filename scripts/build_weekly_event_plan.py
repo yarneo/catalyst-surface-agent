@@ -37,7 +37,9 @@ from trading_bot.tournament.event_replay import (  # noqa: E402
     historical_earnings_events,
     replay_long_straddles,
 )
-from trading_bot.tournament.event_semantics import EventSemanticClassifier  # noqa: E402
+from trading_bot.tournament.event_semantics import (  # noqa: E402
+    EventSemanticClassifier, EVENT_PROMPT_VERSION, EVENT_MODELS, FALLBACK_MODELS,
+)
 from trading_bot.tournament.event_universe import UNIVERSE  # noqa: E402
 from trading_bot.tournament.scheduled import (  # noqa: E402
     ScheduledEventPolicy,
@@ -143,8 +145,10 @@ def _committee(
     reasons: list[str] = []
     symbols = sorted(facts_by_symbol)
     classifier = EventSemanticClassifier(api_key)
-    for offset in range(0, len(symbols), 3):
-        batch = symbols[offset:offset + 3]
+    # One event per request keeps independent votes inside a bounded context
+    # and avoids cross-ticker citations. The fixed quorum policy is unchanged.
+    for offset in range(0, len(symbols)):
+        batch = symbols[offset:offset + 1]
         facts = [fact for symbol in batch for fact in facts_by_symbol[symbol]]
         try:
             result = classifier.analyze(
@@ -155,9 +159,9 @@ def _committee(
             continue
         accepted.update(result.by_ticker())
         reasons.extend(result.reasons)
-        reasons.extend(
-            f"{attempt.model}: {attempt.error}" for attempt in result.attempts
-            if attempt.error)
+        reasons.extend(f"{','.join(batch)} / {attempt.model}: " +
+            (attempt.error or f"valid vote ({attempt.elapsed_s:.1f}s)")
+            for attempt in result.attempts)
     return accepted, reasons
 
 
@@ -308,6 +312,9 @@ def build_plan(
             "consensus": [asdict(value) for value in consensuses],
         },
         "semantic_committee_reasons": semantic_reasons,
+        "semantic_policy": {"version": EVENT_PROMPT_VERSION,
+            "models": list(EVENT_MODELS), "fallback_models": list(FALLBACK_MODELS),
+            "tickers_per_request": 1, "article_summary_max_chars": 1000},
         "events": candidate_rows,
         "portfolio": {
             "aggregate_risk_pct": portfolio_policy.aggregate_risk_pct,

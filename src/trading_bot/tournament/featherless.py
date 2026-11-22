@@ -159,6 +159,31 @@ def _request_worker(out: Any, model: str, api_key: str,
                  time.monotonic() - started))
 
 
+def bounded_request(model: str, api_key: str, payload: dict, timeout_s: float = 25) -> dict:
+    """A single inference with the same killable wall deadline as a committee."""
+    context = mp.get_context("spawn")
+    out = context.Queue()
+    process = context.Process(target=_request_worker,
+        args=(out, model, api_key, payload, timeout_s), daemon=True)
+    process.start()
+    try:
+        try:
+            _, ok, value, _ = out.get(timeout=timeout_s)
+        except queue.Empty:
+            raise FeatherlessError(f"hard timeout after {timeout_s:.1f}s") from None
+        if not ok:
+            raise FeatherlessError(value)
+        return value
+    finally:
+        if process.is_alive():
+            process.terminate()
+        process.join(timeout=1)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=1)
+        out.close()
+
+
 class FeatherlessClient:
     def __init__(self, api_key: str, *, models: Iterable[str] = DEFAULT_MODELS,
                  timeout_s: float = 35.0, max_tokens: int = 1800,

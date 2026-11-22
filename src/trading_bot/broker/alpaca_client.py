@@ -93,19 +93,15 @@ class AlpacaBroker:
             raise ExecutionFailure("outstanding broker orders; cycle cannot allocate capital")
 
     def quote(self, symbol: str) -> dict:
-        from alpaca.data.historical import StockHistoricalDataClient
-        from alpaca.data.requests import StockLatestQuoteRequest
-        from alpaca.data.enums import DataFeed
-        client = StockHistoricalDataClient(self.config.api_key, self.config.secret_key)
-        q = client.get_stock_latest_quote(StockLatestQuoteRequest(
-            symbol_or_symbols=symbol, feed=DataFeed.IEX))[symbol]
-        age = (datetime.now(timezone.utc) - q.timestamp).total_seconds()
-        bid, ask = float(q.bid_price), float(q.ask_price)
-        if not all(math.isfinite(v) and v > 0 for v in (bid, ask)) or ask < bid:
-            raise ExecutionFailure(f"{symbol}: no valid two-sided quote")
-        if age < -5 or age > 120 or (ask - bid) / ((ask + bid) / 2) > 0.02:
-            raise ExecutionFailure(f"{symbol}: stale or excessively wide quote")
-        return {"bid": bid, "ask": ask, "at": q.timestamp.isoformat(), "feed": "iex"}
+        from ..data.quotes import latest_quotes
+        from ..market_tape import quote_problem
+        quotes, _ = latest_quotes([symbol], secrets={
+            "ALPACA_API_KEY": self.config.api_key, "ALPACA_SECRET_KEY": self.config.secret_key})
+        q = quotes.get(symbol)
+        problem = quote_problem(q, at=datetime.now(timezone.utc).isoformat())
+        if problem:
+            raise ExecutionFailure(f"{symbol}: {problem}")
+        return q
 
     def close_position(self, symbol: str, *, sleeve: str = "risk_guard"):
         position = self._client.get_open_position(symbol)

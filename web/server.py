@@ -640,6 +640,8 @@ def ai_attribution_snapshot() -> dict:
     )
     summary = summarize_ai_decisions(read_jsonl(AI_DECISION_LEDGER))
     summary["authority"] = ai_authority_gate(summary)
+    from trading_bot.research_health import research_inputs
+    summary["inputs"] = research_inputs(DATA)
     return summary
 
 

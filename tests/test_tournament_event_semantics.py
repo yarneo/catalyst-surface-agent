@@ -132,3 +132,25 @@ def test_http_200_capacity_error_is_reported_as_provider_failure(monkeypatch):
         ok=True,json=lambda:{"error":{"code":"capacity_exhausted"}}))
     with pytest.raises(featherless.FeatherlessError,match="capacity_exhausted"):
         featherless._request("model","test-key",{},1)
+
+
+def test_event_payload_bounds_article_text_and_marks_truncation():
+    from dataclasses import replace
+    client = EventSemanticClassifier("key", models=("a", "b"))
+    fact = replace(FACTS[0], summary="a"*4000)
+    body = json.loads(client._payload("a", (fact,), CANDIDATES)["messages"][1]["content"])
+    assert len(body["FACTS"][0]["summary"]) == 1000
+    assert body["FACTS"][0]["summary_truncated"] is True
+    import pytest
+    with pytest.raises(ValueError, match="budget"):
+        client.analyze([fact]*40, candidates=CANDIDATES)
+
+
+def test_cross_ticker_citation_is_rejected():
+    value = response()
+    content = json.loads(value["choices"][0]["message"]["content"])
+    content["events"][0]["source_fact_ids"] = ["surface:BBB"]
+    value["choices"][0]["message"]["content"] = json.dumps(content)
+    result = EventSemanticClassifier("key", models=("a", "b"), fallback_models=(),
+        transport=lambda *_:value).analyze(FACTS,candidates=CANDIDATES)
+    assert "AAA" not in result.by_ticker() and "BBB" in result.by_ticker()

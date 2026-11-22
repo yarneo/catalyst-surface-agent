@@ -51,15 +51,11 @@ def run(phase="collect"):
             engine.begin_day(state,frames,at=at)
             if phase=="observe" and not errors:
                 # This client has market-data methods only, no trading API.
-                from alpaca.data.historical import StockHistoricalDataClient
-                from alpaca.data.requests import StockLatestQuoteRequest
-                from alpaca.data.enums import DataFeed
-                from dotenv import dotenv_values
-                secrets=dotenv_values(DATA.parent/".env")
-                client=StockHistoricalDataClient(secrets["ALPACA_API_KEY"],secrets["ALPACA_SECRET_KEY"])
+                from trading_bot.data.quotes import latest_quotes
                 def quote(symbol):
-                    q=client.get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol,feed=DataFeed.IEX))[symbol]
-                    return {"bid":float(q.bid_price),"ask":float(q.ask_price),"at":q.timestamp.isoformat(),"feed":"iex"}
+                    quotes, access = latest_quotes([symbol])
+                    state["quote_feed_access"] = access
+                    return quotes.get(symbol)
                 engine.observe_quotes(state,quote,at=at)
             if phase=="close":engine.mark_close(state,frames,at=at)
         except Exception as exc:errors["virtual_book"]=type(exc).__name__

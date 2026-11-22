@@ -108,6 +108,8 @@ def summarize_ai_decisions(rows: list[dict], *, cost_bps: float = 5.0) -> dict:
 
     return {
         "evidence_version": "ai-v2" if cohorts else "legacy",
+        "input_observations": {status: sum(r.get("input_evidence", {}).get("input_status", "NOT_RECORDED") == status for r in rows)
+            for status in sorted({r.get("input_evidence", {}).get("input_status", "NOT_RECORDED") for r in rows})},
         "excluded_legacy_decisions": legacy_count if cohorts else 0,
         "cohort_count": len(cohorts),
         "independent_changed_sessions": len(independent),

@@ -201,3 +201,39 @@ Release requirements: passing failure drills, credential scan, code manifest,
 private-state preservation, read-only broker reconciliation, and post-release
 service/scheduler verification. Host configuration and account-specific
 verification evidence stay on the private runtime.
+
+## Research inputs and observability (November 2026)
+
+ETF sentiment now queries timestamped Alpaca news. Fixed sector proxies supply
+explicitly labelled context for XLE (XOM/CVX), XLB (LIN/APD/SHW/FCX), XLP
+(PG/KO/PEP/WMT), and XLU (NEE/SO/DUK). These are context companies, not a claim
+about current fund holdings. They cannot supply an ETF earnings date. Duplicate,
+unrelated and future-dated items are rejected. Missing articles are recorded as
+unavailable, never as a neutral model vote.
+
+Featherless produces a bounded, schema-checked sentiment proposal with supplied
+fact citations. The private cache retains the actual articles and input hash;
+model, prompt and news policy identify the evidence cohort. Healthy results
+expire after four hours. Failed inferences do not enter that cache. Changed
+share targets and subsequent after-cost value are still measured against the
+quant-only branch; existing AI authority gates are unchanged. Getting a valid
+answer does not establish a trading edge.
+
+Event classification uses one ticker per committee request with bounded,
+explicitly truncated article summaries. Fixed non-gated models replace a gated
+backup and a backup whose context window was too small. Missing valid votes may
+use the fixed backup pair; disagreement between two valid primary votes cannot
+trigger answer shopping. Calendar, pricing and economic gates still apply.
+
+Broker execution, portfolio research and the standalone PEAD observer share
+real-time feed selection. Existing SIP entitlement is probed, with automatic
+rechecks after 15 minutes. IEX remains the explicit fallback. No delayed SIP or
+historical backfill can masquerade as an executable observation; the original
+120-second freshness and 2% spread limits remain. A subscription rejection is
+an external data-access blocker, not something retries or model inference fix.
+
+The private Research tab separates input health (news, models, quote access)
+from measured outcomes. Historical failures and losses remain in their original
+cohorts. After an input/engine repair, continue every cost-case book from the
+last observed predecessor; an unstarted intermediate cohort contributes no new
+observations and must not reset capital, holdings, losses or protection.

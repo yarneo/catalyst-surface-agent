@@ -12,7 +12,7 @@ The overlay only ever applies a multiplier in [floor, 1.0] to the quant target
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .earnings import days_until_earnings
 from .sentiment import get_daily_sentiment
@@ -30,6 +30,7 @@ class OverlayResult:
     adjusted_weight: float
     multiplier: float
     reasons: list[str]
+    evidence: dict = field(default_factory=dict)
 
 
 class SignalOverlay:
@@ -46,14 +47,14 @@ class SignalOverlay:
 
     def apply(self, symbol: str, base_weight: float) -> OverlayResult:
         if not self.config.enabled or base_weight == 0.0:
-            return OverlayResult(base_weight, 1.0, [])
+            return OverlayResult(base_weight, 1.0, [], {"input_status": "NOT_APPLICABLE"})
 
         reasons: list[str] = []
 
         dte = days_until_earnings(symbol)
         if dte is not None and 0 <= dte <= self.config.earnings_blackout_days:
             reasons.append(f"earnings in {dte}d -> blackout (no new risk)")
-            return OverlayResult(0.0, 0.0, reasons)
+            return OverlayResult(0.0, 0.0, reasons, {"input_status": "EARNINGS_BLACKOUT"})
 
         sent = get_daily_sentiment(symbol)
         mult = self._sentiment_multiplier(sent["score"], sent["confidence"])
@@ -61,4 +62,4 @@ class SignalOverlay:
             f"sentiment {sent['score']:+.2f} (conf {sent['confidence']:.2f}, "
             f"{sent['source']}, {sent['n_headlines']} headlines) -> x{mult:.2f}"
         )
-        return OverlayResult(base_weight * mult, mult, reasons)
+        return OverlayResult(base_weight * mult, mult, reasons, sent)

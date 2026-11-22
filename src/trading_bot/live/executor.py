@@ -275,11 +275,13 @@ class PaperExecutor:
                 from ..portfolio_research import fingerprint
                 from dataclasses import asdict
                 from ..learning import ChampionStore
-                from ..signals.sentiment import DEFAULT_MODEL
+                from ..signals.sentiment import DEFAULT_MODEL, PROMPT_VERSION, NEWS_VERSION
                 import hashlib
                 source = Path(__file__).resolve().parents[1] / "signals/sentiment.py"
                 cohort = fingerprint({"champions": {s: c.as_dict() for s,c in ChampionStore().all().items()},
                     "model": DEFAULT_MODEL, "prompt_source": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "news_source": hashlib.sha256(source.with_name("news.py").read_bytes()).hexdigest(),
+                    "input_policy": [PROMPT_VERSION, NEWS_VERSION],
                     "overlay": asdict(self.overlay.config) if self.overlay else None,
                     "evidence_version": "ai-v2"})
                 append_ai_decision({
@@ -299,6 +301,7 @@ class PaperExecutor:
                     "ai_authority_eligible": bool(authority["eligible"]),
                     "ai_authority_mode": authority["mode"],
                     "overlay_changed_target": with_ai_target_qty != no_ai_target_qty,
+                    "input_evidence": getattr(ov, "evidence", {}) if self.overlay is not None else {"input_status": "NOT_APPLICABLE"},
                 })
             except Exception as exc:  # evidence failure cannot block trading
                 self._log(f"  ⚠ AI attribution recorder failed: {exc}")

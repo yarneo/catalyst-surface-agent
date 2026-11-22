@@ -1,4 +1,36 @@
 """Explain observed validation failures separately from implementation status."""
+import json
+from datetime import datetime, timezone
+
+
+def research_inputs(data, *, now=None):
+    """Read-only diagnostics; fresh input availability is not proven alpha."""
+    now = now or datetime.now(timezone.utc)
+    def read(relative):
+        try:
+            value = json.loads((data / relative).read_text())
+            return value if isinstance(value, dict) else {}
+        except (OSError, ValueError):
+            return {}
+    news = read("research/sentiment_health.json")
+    for symbol, row in list(news.items()):
+        if not isinstance(row, dict):
+            del news[symbol]
+            continue
+        try:
+            age = (now-datetime.fromisoformat(row["observed_at"].replace("Z", "+00:00"))).total_seconds()
+            row["stale"] = not 0 <= age <= 36*3600
+        except (TypeError, ValueError, KeyError):
+            row["stale"] = True
+    plan = read("event_options_shadow/weekly_plan.json")
+    events = plan.get("events", [])
+    return {"sentiment": news, "quote_access": read("research/quote_feed.json"),
+        "events": {"observed_at": plan.get("generated_at"), "candidates": len(events),
+            "classified": sum(bool(e.get("semantic")) for e in events),
+            "notes": plan.get("semantic_committee_reasons", []),
+            "order_authority": False}, "order_authority": False}
+
+
 def apply_research_health(report):
     replay=report.get("production_verification",{})
     market=report.get("market_collection",{})

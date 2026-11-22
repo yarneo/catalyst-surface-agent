@@ -173,3 +173,14 @@ def test_real_transport_path_enforces_a_hard_wall_clock(monkeypatch):
     assert time.monotonic() - started < 1.50
     assert not result.valid
     assert all("hard timeout" in attempt.error for attempt in result.attempts)
+
+
+def test_single_request_has_a_killable_deadline(monkeypatch):
+    import time
+    import pytest
+    from trading_bot.tournament import featherless
+    monkeypatch.setattr(featherless, "_request_worker", slow_process_worker)
+    started = time.monotonic()
+    with pytest.raises(featherless.FeatherlessError, match="hard timeout"):
+        featherless.bounded_request("synthetic", "synthetic", {}, timeout_s=.1)
+    assert time.monotonic()-started < 1.5

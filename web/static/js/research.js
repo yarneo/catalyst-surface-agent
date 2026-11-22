@@ -52,6 +52,24 @@ async function renderStrategy() {
       outcomes.appendChild(h("p.caption","Higher costs assume 0.25% price impact per trade beyond the bid/ask, versus 0.05% in the main case. The earnings row includes the entire portfolio, not just its earnings trades."));
       body.appendChild(h("div.section",outcomes));
 
+      const inputs = ai?.inputs || {}, sentiment = Object.entries(inputs.sentiment || {});
+      const inputCard = h("div.card.card-pad", sectionHead("Are the research inputs working?",
+        "Working inputs let us test an idea. Only completed comparisons can show whether it helps."));
+      if (sentiment.length) inputCard.appendChild(buildTable([
+        {h:"Symbol",cell:r=>r[0]},
+        {h:"News → AI",cell:r=>r[1].stale?"Needs a fresh check":r[1].input_status==="READY"?"Cited assessment available":r[1].input_status==="NO_RECENT_NEWS"?"No recent coverage":"Input unavailable"},
+        {h:"Articles used",cell:r=>(r[1].direct_articles||0)+" direct · "+(r[1].context_articles||0)+" sector context"},
+        {h:"Last checked",cell:r=>r[1].observed_at?new Date(r[1].observed_at).toLocaleString():"Unknown"}
+      ],sentiment));
+      else inputCard.appendChild(h("p","News and AI have not produced a health check yet."));
+      const access = inputs.quote_access || {}, eventInput = inputs.events || {};
+      inputCard.appendChild(h("p",access.feed==="sip"?"Prices: consolidated SIP selected. Each quote must still pass freshness and spread checks.":
+        access.feed==="iex"?"Prices: IEX only. Quiet symbols can have quote gaps; real-time SIP access is "+
+        (access.capabilities?.sip==="SUBSCRIPTION_REQUIRED"?"blocked by the account subscription.":"unavailable or not selected."):"Price-feed access has not been checked."),
+        h("p","Options: "+(eventInput.classified||0)+" / "+(eventInput.candidates||0)+" candidate events classified by the model committee. Classification alone does not approve a trade."),
+        h("p.caption","AI runs for nonzero trade targets. Missing news or a failed model is recorded as unavailable, not as agreement with the trading rules. Sector context comes from fixed proxy companies, not direct ETF announcements."));
+      body.appendChild(h("div.section",inputCard));
+
       body.appendChild(h("div.section",sectionHead("What each test is trying to improve"),
         h("div.grid.cols-3.research-ideas",
           h("div.card.card-pad",h("h3","Risk and recovery"),h("p","Compare QLD position limits and different rules for pausing or resuming. Position limits only matter when the strategy is allowed to trade.")),
