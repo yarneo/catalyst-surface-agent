@@ -63,7 +63,7 @@ async function renderStrategy() {
       ],sentiment));
       else inputCard.appendChild(h("p","News and AI have not produced a health check yet."));
       const access = inputs.quote_access || {}, eventInput = inputs.events || {};
-      inputCard.appendChild(h("p",access.feed==="sip"?"Prices: consolidated SIP selected. Each quote must still pass freshness and spread checks.":
+      inputCard.append(h("p",access.feed==="sip"?"Prices: consolidated SIP selected. Each quote must still pass freshness and spread checks.":
         access.feed==="iex"?"Prices: IEX only. Quiet symbols can have quote gaps; real-time SIP access is "+
         (access.capabilities?.sip==="SUBSCRIPTION_REQUIRED"?"blocked by the account subscription.":"unavailable or not selected."):"Price-feed access has not been checked."),
         h("p","Options: "+(eventInput.classified||0)+" / "+(eventInput.candidates||0)+" candidate events classified by the model committee. Classification alone does not approve a trade."),
