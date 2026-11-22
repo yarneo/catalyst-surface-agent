@@ -111,7 +111,10 @@ def prepare():
         symbols |= {e["symbol"] for e in pead_state["events"].values()
                     if e["status"]=="PREQUALIFIED" and e.get("entry_session")==str(now.date())}
         for cost in (5,25):
-            for prior in observations(folder/"cohorts"/cohort,"pead_10pct",cost)[-1:]:
+            prior_rows=observations(folder/"cohorts"/cohort,"pead_10pct",cost)[-1:]
+            if not prior_rows and manifest.get("opening_books"):
+                prior_rows=[{"book_after":manifest["opening_books"][str(cost)]["pead_10pct"]}]
+            for prior in prior_rows:
                 symbols |= {s for s,p in prior["book_after"]["positions"].items() if float(p["qty"])>1e-8}
         execution={"frames":frame_data({s:f.tail(600) for s,f in frames.items()}),
             "config":load_config(),"champions":{s:c.as_dict() for s,c in champions.items()},
@@ -198,6 +201,8 @@ def _run():
                 missing_minutes=max(r.get("missing_minutes",0) for r in latest))
     for row in rows:
         series = forward[row["name"]]
+        opening=manifest.get("opening_books",{}).get("5",{}).get(row["name"],{})
+        row["opening_virtual_equity"]=opening.get("previous_equity",100000.)
         row["forward"] = performance(series)
         row["latest_market_coverage"] = {k:series[-1].get(k) for k in
             ("data_complete","missing_minutes","carried_bil_mark_minutes","execution_failures")} if series else {}
@@ -209,15 +214,16 @@ def _run():
             if row["promotion"]["status"]=="ELIGIBLE_FOR_REPLAY_REVIEW":row["promotion"]["status"]="COLLECTING"
             row["promotion"]["reasons"].append("25bp stress-cost comparison must also pass")
         if row["name"]=="pead_10pct":
+            # Inherited outcomes remain visible but cannot qualify a new engine.
             completed=series[-1].get("pead_completed_outcomes",0) if series else 0
             row["pead_completed_outcomes"]=completed
-            row["pead_open_positions"]=series[-1].get("pead_open_positions",0) if series else 0
+            row["pead_open_positions"]=series[-1].get("pead_open_positions",0) if series else len(opening.get("pead_state",{}).get("positions",{}))
             if not completed:
                 row["promotion"]["eligible"]=False
                 if row["promotion"]["status"]!="RETIRED":row["promotion"]["status"]="AWAITING_PEAD_OUTCOME"
                 row["promotion"]["reasons"].append("at least one completed funded PEAD outcome required; a cash-only sleeve cannot validate earnings drift")
         # Rebase only the displayed curve; forward returns remain unaltered.
-        eq = 100000.
+        eq = manifest.get("opening_books",{}).get("5",{}).get(row["name"],{}).get("previous_equity",100000.)
         row["curve"] = []
         for r in series:
             eq *= 1+r["return"]
@@ -233,6 +239,7 @@ def _run():
                        "qqq_return": float(qqq_window.iloc[-1]/qqq_window.iloc[0]-1) if len(qqq_window)>1 else None})
     output = {"status":"DATA_BLOCKED" if collection["status"] in {"BLOCKED","DATA_INCOMPLETE"} else "COLLECTING", "at":iso_now(), "as_of":str(end), "cohort":cohort,
               "frozen_at":manifest["frozen_at"], "forward_start_after":manifest["start_after"], "data_hash":data_hash, "parity":parity,
+              "continuation":manifest.get("continuation"),
               "method":"frozen production rules; observed 09:35 and subsequent minute quotes; funded PEAD at 09:40; 5/25bp impact",
               "engineering":{"status":"READY","simulator":SIMULATOR_VERSION,"pead_integration":"FUNDED_COMMON_BOOK","remaining_implementation":[]},
               "candidates":rows, "historical_crises":crises,
@@ -240,6 +247,10 @@ def _run():
               "production_verification":verification,
               "promotion_authority":False, "crypto_enabled":False,
               "next_action":"scheduled collectors supply real quotes and paper cycles; all comparison and integration paths are wired"}
+    from trading_bot.research_health import apply_research_health
+    market=folder/"market_health.json"
+    if market.exists():output["market_collection"]=json.loads(market.read_text())
+    apply_research_health(output)
     atomic_json(folder / "portfolio_lab.json", output)
     print(json.dumps({"status":output["status"], "cohort":cohort, "candidates":len(rows), "as_of":str(end), "parity_passed":parity["passed"]}))
     return output

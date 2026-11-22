@@ -63,6 +63,20 @@ def captured_signals() -> dict:
     return dict(_CAPTURE.get() or {})
 
 
+def frame_payload(frame: pd.DataFrame) -> dict:
+    """Round-trip finite prices exactly, including index timezones.
+
+    pandas.to_json defaults to ten decimal places. That changes volatility
+    targets on replay even when the original strategy and inputs are unchanged.
+    Python's JSON float encoder preserves the original binary float instead.
+    Missing auxiliary values remain JSON null rather than non-standard NaN.
+    """
+    result = frame.astype(object).where(pd.notna(frame), None).to_dict(orient="split")
+    result["index"] = [pd.Timestamp(x).isoformat() for x in frame.index]
+    result["float_encoding"] = "python-json-roundtrip-v1"
+    return result
+
+
 def completed_bars(frame: pd.DataFrame, symbol: str, column: str = "close") -> pd.DataFrame:
     expected = _AS_OF.get() or last_completed_session()
     out = frame.copy().sort_index()
@@ -76,11 +90,10 @@ def completed_bars(frame: pd.DataFrame, symbol: str, column: str = "close") -> p
     out = out.loc[np.isfinite(price) & (price > 0)]
     capture = _CAPTURE.get()
     if capture is not None:
-        import json
         normalized = out.rename(columns=str.lower)
         existing = capture.get(symbol)
         if existing is None or len(existing["data"]) < len(out):
-            capture[symbol] = json.loads(normalized.to_json(orient="split", date_format="iso"))
+            capture[symbol] = frame_payload(normalized)
     return out
 
 

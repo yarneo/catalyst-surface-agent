@@ -1,6 +1,6 @@
 # Portfolio hardening register
 
-Updated 2026-11-11. Scope: reusable paper portfolio runtime. Credentials,
+Updated 2026-11-22. Scope: reusable paper portfolio runtime. Credentials,
 account identifiers, private dashboards, host configuration, books, logs and
 account evidence remain outside this repository. The event engine and its
 historical deployment remain separate.
@@ -93,8 +93,9 @@ remains conditional. The exact broker-tape replay verifies production code
 against what it actually requested and received; it does **not** independently
 validate broker marks or the daily-bar simulator's fill assumptions.
 
-Simulator comparison and funded PEAD integration are implemented and tested;
-neither waits for future coding once inputs arrive. Exact broker replay is
+Simulator comparison and funded PEAD integration are implemented. Deployment
+observations exposed validation defects; implementation alone is not evidence
+that the collectors or comparisons work on real inputs. Exact broker replay is
 request-for-request. The independent fill ledger permits at most $0.05 cash
 discrepancy, 1e-7 shares and $0.01 average entry discrepancy. The simulated
 decision book uses a frozen 5bp-of-equity tolerance for mark-timing effects;
@@ -143,6 +144,42 @@ confirmation uses bounded, markup-stripped Alpaca article bodies when summaries
 omit the release session. Explicit dates are checked at full day/year boundaries;
 provider errors remain recorded and the independent-source quorum is preserved.
 The general shadow planner profile is now included in code-only releases.
+
+### Validation repair: precision, feed access and continuity
+
+Price archives previously used pandas' default ten-decimal JSON encoding.
+That changed nonzero volatility-scaled signals by tiny amounts and prevented
+exact replay. New captures preserve binary floating-point values through
+Python JSON round trips and retain timezone-aware indices. Quote responses also
+record their observation time, so a fill that takes minutes does not make a
+later quote appear to come from the future relative to the cycle start.
+
+Old captures remain immutable. A bounded 1e-9 tolerance applies only to legacy
+advisory overlay input weights for diagnostic reconstruction. Order arguments
+and risk state remain exact; the result is labeled `LEGACY_INPUT_PRECISION`
+and never qualifies for the five successful production opens. Lossless captures
+receive no such tolerance. The first failure is retained rather than replaced
+by a later cleanup request. Independent ledger results and failed executions
+remain visible even when a capture cannot qualify.
+
+The lightweight collector probes existing real-time SIP access once per
+session, falls back explicitly to IEX when unavailable, and retries bad quotes
+once within its bounded observation window. It neither buys a subscription nor
+uses delayed prices as fresh executable quotes. It now reports cumulative
+session coverage and per-symbol reasons; a healthy last tick cannot erase
+earlier failures. IEX is a single-exchange feed and cannot guarantee fresh
+minute quotes for quiet symbols. Persistent gaps require a suitable real-time
+data entitlement, not looser freshness or promotion gates. See the
+[Alpaca market data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq).
+
+Use `scripts/continue_portfolio_research.py --from-cohort <prior-cohort>` only
+for an explicit validation repair before the successor's first pre-open plan.
+All eleven candidates and both cost books must continue together. Cash, shares,
+entry cost, risk high-water marks and open PEAD events are copied into sealed
+starting books with source hashes. Missing sessions or partial candidate
+families are rejected. Earlier observations and their losses remain in the
+archived report; they are not relabeled as evidence for the new engine. The
+dashboard shows these preserved results alongside current validation status.
 
 Run `uv run pytest` for the default suite. Portfolio installations use
 `uv sync --extra portfolio`.

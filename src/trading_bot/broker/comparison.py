@@ -12,22 +12,28 @@ MODEL_TOLERANCE_BPS=5.
 CASH_TOLERANCE_USD=.05
 
 
-def compare_cycle(folder):
-    exact=verify_recorded_cycle(folder)  # validates all archived hashes first
+def compare_cycle(folder, *, exact=None):
+    exact=exact or verify_recorded_cycle(folder)  # validates all archived hashes first
     folder=Path(folder)
     meta=json.loads((folder/"metadata.json").read_text())
     report={"version":VERSION,"cycle":folder.name,"session":exact.get("session"),
         "engine_hash":meta.get("engine_hash"),"passed":False,"order_authority":False,
         "network_access":False,"exact_replay":exact["status"],"status":"AWAITING_COMPLETE_CAPTURE"}
     if not all(k in meta for k in ("cash","positions","final_account","final_positions")):return report
-    if exact["status"] not in {"MATCHED","MATCHED_FAILED_EXECUTION"}:
+    if exact["status"] not in {"MATCHED","MATCHED_FAILED_EXECUTION","MATCHED_CHANGED_ENGINE","LEGACY_INPUT_PRECISION"}:
         return {**report,"status":"REPLAY_MISMATCH"}
+    qualifying=exact["status"] in {"MATCHED","MATCHED_FAILED_EXECUTION"} and exact.get("same_engine",False)
+    report["qualification_blockers"]=exact.get("qualification_blockers",[])
     rows=[json.loads(line) for line in (folder/"broker.jsonl").read_text().splitlines()]
     requests=[];terminal={};quotes={};latest_quote={}
     for row in rows:
         if row["method"]=="quote" and "result" in row:
             symbol=row["args"][0];q=decode(row["result"])
             if "bid" in q:
+                if row.get("observed_at"):
+                    # Synthetic captures have an explicit simulated clock;
+                    # they must not borrow the machine's later wall clock.
+                    q["observed_at"]=row["observed_at"]
                 quotes.setdefault(symbol,[]).append(q);latest_quote[symbol]=q
         if row["method"]=="submit_order":
             request=decode(row["args"])[0]
@@ -96,7 +102,10 @@ def compare_cycle(folder):
     matched=(sim["error_type"]==meta.get("error_type") and len(sim["orders"])==len(fills) and abs(delta)<=tolerance
              and all(abs(x)<=tolerance for x in errors.values()) and not state_errors)
     costs_ok=len(slippage)==sum(f["filled_qty"]>0 for f in fills) and all(x<=25 for x in slippage)
-    return {**report,"status":"MATCHED" if matched and costs_ok else "COST_MODEL_EXCEEDED" if matched else "SIMULATOR_MISMATCH",
-        "passed":matched and costs_ok,"simulator_cash_error_usd":delta,"holding_value_errors":errors,
+    status="MATCHED" if matched and costs_ok else "COST_MODEL_EXCEEDED" if matched else "SIMULATOR_MISMATCH"
+    if status=="MATCHED" and not qualifying:status=exact["status"]
+    return {**report,"status":status,
+        "passed":matched and costs_ok and qualifying,"diagnostic_match":matched and costs_ok,
+        "simulator_cash_error_usd":delta,"holding_value_errors":errors,
         "risk_state_errors":state_errors,"model_tolerance_usd":tolerance,"cost_envelope_passed":costs_ok,
         "scope":"production open decisions, independent cash/holdings ledger and risk state; observed fills and quotes; forward impact remains modeled"}

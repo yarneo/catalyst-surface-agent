@@ -1237,6 +1237,7 @@ def api_portfolio_lab():
     result = json.loads(path.read_text()) if path.exists() else {"status": "AWAITING_FIRST_RUN"}
     for key, relative in (("pead_collection", "pead_shadow/summary.json"),
                           ("market_collection", "research/market_health.json"),
+                          ("market_feed_access", "research/quote_feed.json"),
                           ("production_verification", "research/production_verification.json")):
         source = DATA / relative
         result[key] = json.loads(source.read_text()) if source.exists() else {"status": "AWAITING_FIRST_RUN"}
@@ -1254,7 +1255,17 @@ def api_portfolio_lab():
     if bounds and bounds[0]+timedelta(minutes=7)<=moment<bounds[1]:
         stamp=market.get("at")
         market["stale"]=not stamp or (moment-datetime.fromisoformat(stamp)).total_seconds()>120
-    return result
+    continuation=result.get("continuation")
+    if continuation:
+        prior=str(continuation.get("from_cohort",""))
+        archive=DATA/"research/cohorts"/prior/"report.json"
+        if prior.isalnum() and archive.exists():
+            old=json.loads(archive.read_text())
+            result["prior_forward"]={"cohort":prior,"as_of":old.get("as_of"),
+                "candidates":[{k:r.get(k) for k in ("name","forward","forward_high_cost","pead_open_positions")}
+                              for r in old.get("candidates",[])]}
+    from trading_bot.research_health import apply_research_health
+    return apply_research_health(result)
 
 
 @app.get("/api/release")

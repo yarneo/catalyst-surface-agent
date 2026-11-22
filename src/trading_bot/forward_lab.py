@@ -9,6 +9,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 import json
 import math
+import hashlib
 from pathlib import Path
 
 from .portfolio_research import fingerprint
@@ -109,6 +110,47 @@ def observations(folder, name, cost_bps=5):
     return [json.loads(p.read_text()) for p in paths]
 
 
+def continue_books(folder, manifest, predecessor, *, at):
+    """Explicit all-candidate continuation for a validation repair.
+
+    Preserve holdings, losses, risk high-water marks and open PEAD events. Old
+    observations stay in their original cohort and cannot count as new evidence.
+    This may only be sealed before any plan/observation of the successor exists.
+    """
+    from .portfolio_research import EXPERIMENTS
+    folder=Path(folder)
+    if not predecessor.isalnum() or predecessor==manifest["cohort"]:
+        raise ForwardEvidenceError("invalid predecessor cohort")
+    destination=folder/"cohorts"/manifest["cohort"]
+    if list(destination.glob("decisions/*.json")) or list(destination.glob("observations/*/*/*.json")):
+        raise ForwardEvidenceError("cannot change an active cohort's starting books")
+    if manifest.get("opening_books"):
+        raise ForwardEvidenceError("starting books already sealed")
+    books={};sources={};sessions=set()
+    for cost in (5,25):
+        books[str(cost)]={}
+        for spec in EXPERIMENTS:
+            paths=sorted((folder/"cohorts"/predecessor/"observations"/str(cost)/spec.name).glob("*.json"))
+            if not paths:raise ForwardEvidenceError("all candidates and both cost books must continue together")
+            source=paths[-1];observation=json.loads(source.read_text())
+            if observation["cohort"]!=predecessor or observation["cost_bps"]!=cost:
+                raise ForwardEvidenceError("foreign predecessor observation")
+            book=observation["book_after"]
+            sessions.add(book["last_session"])
+            books[str(cost)][spec.name]=deepcopy(book)
+            sources[source.relative_to(folder).as_posix()]=hashlib.sha256(source.read_bytes()).hexdigest()
+    first=calendar(datetime.fromisoformat(manifest["start_after"]).year).date_to_session(manifest["start_after"],direction="next").date()
+    if str(first)<=manifest["start_after"]:first=calendar(first.year).next_session(str(first)).date()
+    if sessions!={str(previous_session(first))}:
+        raise ForwardEvidenceError("cannot skip unobserved sessions when continuing books")
+    result={**manifest,"opening_books":books,"continuation":{"from_cohort":predecessor,"at":at,
+        "sources":sources,"last_session":next(iter(sessions)),
+        "reason":"validation repair; all virtual holdings and risk state retained; prior sessions do not qualify for the new engine"}}
+    result["opening_books_hash"]=fingerprint(books)
+    atomic_json(folder/"cohorts"/(manifest["cohort"]+".json"),result)
+    return result
+
+
 def settle_session(folder, manifest, plan, marks, *, observed_at):
     now = datetime.fromisoformat(observed_at).astimezone(ET)
     day = datetime.fromisoformat(plan["session"]).date()
@@ -153,7 +195,14 @@ def settle_session(folder, manifest, plan, marks, *, observed_at):
             else:
                 if day != first_day:
                     raise ForwardEvidenceError("initial forward session was missed")
-                book = new_book() if production else {"shares":{},"cash":100000.,"previous_equity":100000.,"peak":100000.,"killed":False}
+                if production and manifest.get("opening_books"):
+                    if fingerprint(manifest["opening_books"])!=manifest.get("opening_books_hash"):
+                        raise ForwardEvidenceError("altered continuation books")
+                    book=deepcopy(manifest["opening_books"][str(cost_bps)][name])
+                    if book["last_session"]!=str(previous_session(day)):
+                        raise ForwardEvidenceError("continuation observation gap")
+                else:
+                    book = new_book() if production else {"shares":{},"cash":100000.,"previous_equity":100000.,"peak":100000.,"killed":False}
             diagnostics={}
             if production:
                 after,row,diagnostics=advance_production(book,plan,marks,tape,specs[name],cost_bps)

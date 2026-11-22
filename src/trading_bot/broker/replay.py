@@ -163,7 +163,10 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None,
                 quote_indices[symbol]=index+1
                 value=value[index]
             from ..market_tape import validate_quote
-            validate_quote(value,at=snapshot["at"])
+            # Captured fills may span minutes while an order settles. Use the
+            # recorded response time for that quote, never the cycle's start.
+            quote_time=value.get("observed_at",snapshot["at"]) if fills is not None else snapshot["at"]
+            validate_quote(value,at=quote_time)
             client.quotes[symbol]=value
             if "bid" in value and "ask" in value:
                 client.prices[symbol]=(float(value["bid"])+float(value["ask"]))/2
@@ -227,6 +230,7 @@ def replay_cycle(snapshot, frames, prices, *, cost_bps=5, capture_to=None,
         stack.enter_context(patch.object(sys,"argv",argv))
         if capture_to is not None:
             stack.enter_context(patch.object(evidence,"DATA",Path(capture_to)))
+            stack.enter_context(patch.object(evidence,"iso_now",lambda:snapshot["at"]))
         with marketdata.signal_session(signal_day):
             with evidence.capture_cycle(capture_to is not None,root):
                 try:
@@ -281,13 +285,15 @@ def verify_recorded_cycle(folder):
     if meta.get("status") not in {"COMPLETED","FAILED"} or "initial_state" not in meta:
         return {"status":"INCOMPLETE_CAPTURE","order_authority":False,"network_access":False}
     rows=[json.loads(line) for line in (folder/"broker.jsonl").read_text().splitlines()]
+    raw_frames=json.loads((folder/"signals.json").read_text())
     frames={s:pd.DataFrame(raw["data"],columns=raw["columns"],index=pd.to_datetime(raw["index"]))
-            for s,raw in json.loads((folder/"signals.json").read_text()).items()}
+            for s,raw in raw_frames.items()}
     root=Path(__file__).resolve().parents[3]
     path=root/"scripts/run_portfolio.py"
     spec=importlib.util.spec_from_file_location("recorded_portfolio_replay",path)
     runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
-    client=PlaybackClient(rows)
+    legacy_signals=any(r.get("float_encoding")!="python-json-roundtrip-v1" for r in raw_frames.values())
+    client=PlaybackClient(rows,legacy_signal_diagnostics=legacy_signals)
     initial=ExecutorState(**meta["initial_state"])
     saved=[]
     champions={s:learning.Champion(**v) for s,v in meta["champions"].items()}
@@ -316,7 +322,8 @@ def verify_recorded_cycle(folder):
             (runner,"DATA",Path(tmp)), (config,"load_config",lambda:metadata("config")),
             (ExecutorState,"load",lambda *a,**k:deepcopy(saved[-1] if saved else initial)),
             (ExecutorState,"save",save_state),
-            (PaperExecutor,"_recent_bars",lambda self,s:marketdata.completed_bars(frames[s],s)),
+            (PaperExecutor,"_recent_bars",lambda self,s:marketdata.completed_bars(
+                frames[s].loc[str(moment.date()-timedelta(days=self.lookback_days)):],s)),
             (allocations,"read_allocations",lambda **kw:metadata("allocations")),
             (runner,"load_policy",lambda:metadata("policy")), (marketdata,"close_series",series),
             (SignalOverlay,"apply",lambda self,s,w:client.consume("overlay",s,w)),
@@ -350,7 +357,14 @@ def verify_recorded_cycle(folder):
                 broker.get_positions()
             client.assert_finished()
         except BaseException as exc:
-            error=exc
+            # A cleanup read must not overwrite the first decision failure.
+            if error is None:error=exc
+    cause=error
+    while cause is not None:
+        if isinstance(cause,ReplayMismatch):
+            error=cause
+            break
+        cause=cause.__cause__
     same_engine=meta.get("engine_hash")==engine_fingerprint(root)
     actual=asdict(saved[-1] if saved else initial)
     expected=meta.get("final_state",meta["initial_state"])
@@ -360,10 +374,17 @@ def verify_recorded_cycle(folder):
             and not different and client.index==len(rows) and not isinstance(error,ReplayMismatch)):
         status="MATCHED_FAILED_EXECUTION"
     if status=="MATCHED" and not same_engine:status="MATCHED_CHANGED_ENGINE"
+    reconstructed=status.startswith("MATCHED")
+    if reconstructed and legacy_signals:status="LEGACY_INPUT_PRECISION"
     return {"status":status,"session":str(moment.date()),"cycle":folder.name,
         "engine_hash":meta.get("engine_hash"),"same_engine":same_engine,
         "recorded_calls":len(rows),"verified_calls":client.index,
         "order_requests_verified":sum(r["method"]=="submit_order" for r in rows) if status.startswith("MATCHED") else 0,
+        "diagnostic_requests_match":reconstructed,
+        "diagnostic_order_requests":sum(r["method"]=="submit_order" for r in rows) if reconstructed else 0,
+        "signal_rounding":client.signal_rounding,"signal_precision":"legacy_10_decimal" if legacy_signals else "lossless",
+        "captured_execution_status":meta["status"],
+        "qualification_blockers":["legacy rounded signal inputs; fresh lossless captures required"] if legacy_signals else [],
         "risk_state_differences":different,"error_type":type(error).__name__ if error else None,
         "error":str(error)[:300] if error else None,"network_access":False,"order_authority":False,
         "scope":"decision requests, archived broker responses and risk state; not independent alpha or daily-proxy validation"}

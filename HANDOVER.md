@@ -51,6 +51,15 @@ outcome. Engineering is implemented; validation is pending actual observations.
 The Experiments tab reports both states. Missing quotes or failed comparisons
 remain explicit and cannot be fixed by silently relaxing the gates.
 
+The November validation repair preserves full floating-point price precision.
+Legacy rounded captures can reconstruct requests diagnostically but cannot
+qualify as exact evidence. The collector now exposes cumulative per-symbol
+quote gaps, probes existing SIP access and retries transient IEX gaps once.
+Delayed quotes never replace fresh executable quotes. Persistent IEX coverage
+gaps remain a data-access limitation, not a claim that more days alone will fix
+the lab. Explicit whole-family continuation retains every virtual book and open
+PEAD position across this repair; see the hardening register for the command.
+
 ## Historical event deployment
 
 The measured lifecycle is complete. The agent bought 13 AVGO Sep 4 $367.50

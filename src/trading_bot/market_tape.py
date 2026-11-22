@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from collections import Counter
 
 from .runtime_state import atomic_json
 
@@ -31,6 +32,37 @@ def validate_quote(quote, *, at):
     return bid, ask
 
 
+def quote_problem(quote, *, at):
+    """Explain coverage failures without changing executable-quote limits."""
+    if quote is None:return "MISSING_QUOTE"
+    try:
+        bid,ask=float(quote["bid"]),float(quote["ask"])
+        age=(instant(at)-instant(quote["at"])).total_seconds()
+        if not all(math.isfinite(x) and x>0 for x in (bid,ask)) or ask<bid:return "INVALID_QUOTE"
+        if age < -5:return "FUTURE_QUOTE"
+        if age > 120:return "STALE_QUOTE"
+        if (ask-bid)/((ask+bid)/2)>.02:return "WIDE_QUOTE"
+        return None
+    except (KeyError,TypeError,ValueError,OverflowError):return "INVALID_QUOTE"
+
+
+def quote_coverage(folder, plan, *, through):
+    """Session totals survive a healthy last tick; gaps are never overwritten."""
+    rows=market_tape(folder,plan)
+    first=instant(plan["market_open"])+timedelta(minutes=5)
+    end=min(instant(through).replace(second=0,microsecond=0)+timedelta(minutes=1),instant(plan["market_close"]))
+    expected=max(0,int((end-first).total_seconds()/60))
+    by_symbol={s:Counter() for s in plan["symbols"]}
+    for row in rows:
+        for symbol in plan["symbols"]:
+            problem=quote_problem(row.get("quotes",{}).get(symbol),at=row["at"])
+            if problem:by_symbol[symbol][problem]+=1
+    return {"session":plan["session"],"expected_minutes":expected,"collected_minutes":len(rows),
+        "missing_tick_minutes":max(0,expected-len(rows)),
+        "quote_gap_minutes_by_symbol":{s:sum(v.values()) for s,v in by_symbol.items() if v},
+        "problems_by_symbol":{s:dict(v) for s,v in by_symbol.items() if v}}
+
+
 def capture_tick(folder, plan, quotes, *, at):
     stamp = instant(at)
     # Calendar bounds were validated and sealed before open. Using them avoids
@@ -45,10 +77,8 @@ def capture_tick(folder, plan, quotes, *, at):
         return json.loads(path.read_text())
     errors = {}
     for symbol in plan["symbols"]:
-        try:
-            validate_quote(quotes[symbol], at=at)
-        except (KeyError, TypeError, ValueError):
-            errors[symbol] = "missing, stale or invalid quote"
+        problem=quote_problem(quotes.get(symbol),at=at)
+        if problem:errors[symbol]=problem
     row = {"session": plan["session"], "at": at, "plan_hash": plan["plan_hash"],
            "quotes": quotes, "errors": errors}
     row["sha256"] = fingerprint(row)

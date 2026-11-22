@@ -13,12 +13,15 @@ async function renderStrategy() {
       const candidates=lab.candidates||[];
       const replay=lab.production_verification||{},pead=lab.pead_collection||{};
       const comparison=replay.simulator_comparison||{},market=lab.market_collection||{};
+      const coverage=market.session_coverage||{},pipeline=lab.pipeline||{};
       const fundedPead=candidates.find(r=>r.name==="pead_10pct")||{};
       const baseline=candidates.find(r=>r.name==="baseline_70");
       body.appendChild(h("div.section",h("div.card.card-pad",
         sectionHead("What is ready, and what needs time?","Collectors run automatically. Sample thresholds allow review; they do not establish a profitable strategy."),
-        h("p",lab.engineering?.status==="READY"
-          ? "Simulator comparison and funded PEAD integration are implemented. The remaining gates need observed trading data and successful validation."
+        h("p",pipeline.status==="ACTION_REQUIRED"
+          ? "Validation needs attention. The failures below must be resolved before these experiments can qualify."
+          : lab.engineering?.status==="READY"
+          ? "The research code is deployed. Qualifying evidence requires complete observations and successful replay checks."
           : "Checking implementation readiness…"),
         buildTable([
           {h:"Evidence",cell:r=>r[0]},{h:"Progress",cell:r=>r[1]},{h:"What happens next",cell:r=>r[2]},
@@ -30,7 +33,11 @@ async function renderStrategy() {
           ["Portfolio experiments",(baseline?.promotion?.complete_sessions||0)+" / 60 complete sessions · "+(baseline?.forward?.observations||0)+" total",
             (lab.forward_collection?.status||"Awaiting collector")+" · 12 weekly blocks, costs and parity also required"],
           ["Minute quote collection",market.status||"Awaiting first session",
-            (market.stale?"STALE · ":"")+(market.at?"Last check "+new Date(market.at).toLocaleString():"Begins at 09:35 ET; follows the exchange close")],
+            (market.stale?"STALE · ":"")+(coverage.collected_minutes!=null
+              ? coverage.collected_minutes+" / "+coverage.expected_minutes+" scheduled ticks · "+Object.entries(coverage.quote_gap_minutes_by_symbol||{}).map(([s,n])=>s+": "+n+" quote gaps").join(", ")
+              : market.at?"Last check "+new Date(market.at).toLocaleString():"Begins at 09:35 ET; follows the exchange close")],
+          ["Market data access",market.feed||lab.market_feed_access?.feed||"Checking",
+            market.feed_access?.limitation||lab.market_feed_access?.limitation||"Real-time quotes required; delayed data cannot price a simulated fill"],
           ["AI contribution",(ai.independent_changed_sessions||0)+" / 30 changed sessions",
             "Only sessions where AI changes the target count; repeated calls add no evidence"],
           ["Options",(options.promotion_evidence?.independent_outcomes||0)+" / 30 completed events",
@@ -38,6 +45,10 @@ async function renderStrategy() {
           ["Funded earnings drift (PEAD)",(pead.forecast_events||0)+" archived forecasts · "+(fundedPead.pead_open_positions||0)+" portfolio positions",
             (pead.stale?"STALE":pead.status||"Awaiting collector")+" · "+(fundedPead.pead_completed_outcomes||0)+" completed portfolio outcomes; up to 60 sessions, with earlier risk exits"],
         ]),
+        h("p",(pipeline.issues||[]).join(" · ")),
+        h("p.dim",(replay.diagnostic_matching_sessions||[]).length+" archived request reconstructions · "+
+          (replay.legacy_precision_sessions||[]).length+" with rounded inputs · "+
+          (replay.failed_execution_sessions||[]).length+" recorded failed executions. These are separate from qualifying successful opens."),
         h("p.dim","PEAD uses up to 10% of the same virtual portfolio, at most 5% per stock and two stocks. Entries are funded from cash and BIL; the router and risk guard see those holdings. Its component-only collector is diagnostic and is not added to portfolio P&L."),
         h("p",lab.report_stale?"Research report is behind the latest completed session.":"Research report covers the latest completed session."),
         h("p.dim","PEAD last observation: "+(pead.at||"pending")+" · feed problems: "+Object.keys(pead.feed_errors||{}).join(", ")))));
@@ -62,13 +73,21 @@ async function renderStrategy() {
       if((baseline?.curve||[]).length>1) {
         const canvas=h("canvas");
         body.appendChild(h("div.section",h("div.card.chart-card",
-          sectionHead("Forward virtual equity","Equal starting capital, modeled trading costs; these are not broker balances."),
+          sectionHead("Forward virtual equity",lab.continuation?"Existing virtual holdings, losses and risk state carried into this validation release; modeled costs.":"Equal starting capital, modeled trading costs; these are not broker balances."),
           h("div.chart-box",{style:"height:320px"},canvas))));
         const palette=["var(--pos-line)","var(--c-qqq)","var(--c-regime)","var(--amber)","var(--text-3)"];
         makeLineChart(canvas,baseline.curve.map(r=>new Date(r.date+"T12:00:00Z")),
           candidates.filter(r=>r.curve?.length===baseline.curve.length).slice(0,5).map((r,i)=>({
             label:r.name.replaceAll("_"," "),data:r.curve.map(x=>x.equity),color:palette[i]
           })),{yfmt:v=>"$"+Math.round(v).toLocaleString()});
+      }
+      if(lab.prior_forward?.candidates?.length) {
+        body.appendChild(h("div.section",h("div.card.card-pad",
+          sectionHead("Preserved results before the validation repair","All 22 virtual books continued with their existing cash, holdings and risk state. Earlier sessions remain archived and do not count as fresh validation."),
+          buildTable([{h:"Experiment",cell:r=>r.name.replaceAll("_"," ")},
+            {h:"Prior sessions",cell:r=>String(r.forward?.observations||0)},
+            {h:"Prior return",cell:r=>pct(r.forward?.return)},
+            {h:"Prior return at 25bp",cell:r=>pct(r.forward_high_cost?.return)}],lab.prior_forward.candidates))));
       }
       body.appendChild(h("div.section",h("div.card.card-pad",
         sectionHead("Conditional historical research","Whole-portfolio daily-bar proxies. Today's ETF selection is used retrospectively, so these are not validated live-strategy returns."),

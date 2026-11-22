@@ -23,6 +23,21 @@ from trading_bot.marketdata import (
 )
 
 
+def test_signal_archive_round_trips_prices_without_pandas_decimal_rounding():
+    import json
+    frame=pd.DataFrame({"close":[100.12345678901234,101.98765432109876],
+                        "volume":[123,456],"optional":[np.nan,1.]},
+                       index=pd.date_range("2026-11-10",periods=2,tz="America/New_York"))
+    with marketdata.signal_session(frame.index[-1].date()):
+        marketdata.completed_bars(frame,"TEST")
+        raw=json.loads(json.dumps(marketdata.captured_signals()["TEST"],allow_nan=False))
+    restored=pd.DataFrame(raw["data"],columns=raw["columns"],index=pd.to_datetime(raw["index"]))
+    assert restored["close"].tolist()==frame["close"].tolist()
+    assert raw["data"][0][2] is None
+    assert restored.index[0]==frame.index[0]
+    assert raw["float_encoding"]=="python-json-roundtrip-v1"
+
+
 class _FakeTicker:
     """Stands in for yf.Ticker with a canned frame."""
 

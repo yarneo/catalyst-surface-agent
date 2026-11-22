@@ -19,12 +19,13 @@ from .simulation_policy import reconcile_pead
 from .pead_shadow import validate_quote
 from .market_tape import capture_tick, market_tape
 from .market_tape import instant
+from .marketdata import frame_payload
 
 VERSION="production-rules-observed-minutes-v1"
 
 
 def frame_data(frames):
-    return {s:json.loads(f.to_json(orient="split",date_format="iso")) for s,f in frames.items()}
+    return {s:frame_payload(f) for s,f in frames.items()}
 
 
 def read_frames(raw):

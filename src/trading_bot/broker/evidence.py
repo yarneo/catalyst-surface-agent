@@ -9,6 +9,7 @@ from decimal import Decimal
 from enum import Enum
 import hashlib
 import json
+import math
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -84,6 +85,7 @@ class Recorder:
             append_record(self.folder/"broker.jsonl",row)
             raise
         row["result"]=encode(result)
+        row["observed_at"]=iso_now()
         append_record(self.folder/"broker.jsonl",row)
         return result
 
@@ -172,13 +174,28 @@ class RecordedRemoteError(RuntimeError):
 
 
 class PlaybackClient:
-    def __init__(self,rows):
+    def __init__(self,rows, *, legacy_signal_diagnostics=False):
         self.rows,self.index=rows,0
+        self.legacy_signal_diagnostics=legacy_signal_diagnostics
+        self.signal_rounding=[]
     def consume(self,name,*args,**kwargs):
         if self.index >= len(self.rows):
             raise ReplayMismatch("extra call: "+name)
         row=self.rows[self.index]
-        if (row["method"],row["args"],row["kwargs"]) != (name,encode(args),encode(kwargs)):
+        actual_args=encode(args)
+        # Old ten-decimal price archives cannot support exact signal replay.
+        # Reconstruct them diagnostically, never as qualifying exact evidence.
+        # This exception applies ONLY to the advisory overlay input; broker
+        # requests (including fractional order quantities) remain exact.
+        if (self.legacy_signal_diagnostics and name==row["method"]=="overlay"
+                and len(actual_args)==len(row["args"])==2
+                and actual_args[0]==row["args"][0] and actual_args!=row["args"]
+                and isinstance(actual_args[1],(int,float)) and isinstance(row["args"][1],(int,float))
+                and math.isclose(actual_args[1],row["args"][1],rel_tol=0,abs_tol=1e-9)):
+            self.signal_rounding.append({"call":self.index,"symbol":actual_args[0],
+                "absolute_difference":abs(actual_args[1]-row["args"][1])})
+            actual_args=row["args"]
+        if (row["method"],row["args"],row["kwargs"]) != (name,actual_args,encode(kwargs)):
             raise ReplayMismatch(f"call {self.index}: expected {row['method']}, observed {name}; decision inputs or order request differ")
         self.index+=1
         if row.get("error"):raise RecordedRemoteError(row["error"])

@@ -71,6 +71,135 @@ def capture(tmp_path):
     return next((tmp_path/"production_cycles").iterdir()),result
 
 
+def capture_nonzero_overlay(tmp_path):
+    from trading_bot.broker.evidence import encode
+    from trading_bot.signals.overlay import OverlayResult
+    from trading_bot.learning import Champion
+    plan,frames,_=fixture()
+    frame=frames["QLD"].copy()
+    t=np.arange(len(frame))
+    frame["close"]=100.+.13*t+2*np.sin(t)
+    frames["XLE"]=frame
+    plan["execution"]["champions"]={"XLE":Champion("ts_momentum",{"lookback":20},1.,"2026-01-01").as_dict()}
+    snap=snapshot(plan);snap["arguments"]["no_enrich"]=False
+    snap["allocations"]={"weights":{"regime":0},"verdicts":{"regime":"FAST_TRIPPED"}}
+    quotes={s:{"bid":float(f.close.iloc[-1])-.01,"ask":float(f.close.iloc[-1])+.01,
+               "at":snap["at"],"feed":"synthetic"} for s,f in frames.items()}
+    externals=[{"method":"overlay","args":["XLE",0],"result":encode(OverlayResult(.2,1.,["synthetic"]))},
+               {"method":"ai_authority","result":encode({"eligible":False,"mode":"shadow_advisory"})}]
+    replay_cycle(snap,frames,{s:float(f.close.iloc[-1]) for s,f in frames.items()},quotes=quotes,
+                 externals=externals,capture_to=tmp_path)
+    return next((tmp_path/"production_cycles").iterdir())
+
+
+def test_lossless_nonzero_overlay_replays_exact_orders_and_state(tmp_path):
+    from trading_bot.broker.replay import verify_recorded_cycle
+    folder=capture_nonzero_overlay(tmp_path)
+    result=verify_recorded_cycle(folder)
+    assert result["status"]=="MATCHED",result
+    assert result["signal_rounding"]==[]
+    assert result["order_requests_verified"]>0
+    assert compare_cycle(folder)["passed"]
+
+
+def test_legacy_rounded_prices_remain_diagnostic_not_qualifying(tmp_path):
+    from trading_bot.broker.replay import verify_recorded_cycle
+    folder=capture_nonzero_overlay(tmp_path)
+    path=folder/"signals.json"
+    raw=json.loads(path.read_text())
+    for s,r in raw.items():
+        frame=pd.DataFrame(r["data"],columns=r["columns"],index=pd.to_datetime(r["index"]))
+        raw[s]=json.loads(frame.to_json(orient="split",date_format="iso"))
+    path.write_text(json.dumps(raw))
+    integrity=json.loads((folder/"integrity.json").read_text())
+    integrity["signals.json"]=hashlib.sha256(path.read_bytes()).hexdigest()
+    (folder/"integrity.json").write_text(json.dumps(integrity))
+    result=verify_recorded_cycle(folder)
+    assert result["status"]=="LEGACY_INPUT_PRECISION",result
+    assert result["diagnostic_requests_match"] and result["signal_rounding"]
+    assert result["order_requests_verified"]==0
+    comparison=compare_cycle(folder)
+    assert not comparison["passed"] and comparison["ledger_passed"]
+
+
+@pytest.mark.parametrize("difference",[1e-12,.05])
+def test_lossless_replay_keeps_first_signal_error_not_cleanup_error(tmp_path,difference):
+    from trading_bot.broker.replay import verify_recorded_cycle
+    folder=capture_nonzero_overlay(tmp_path)
+    path=folder/"broker.jsonl"
+    rows=[json.loads(line) for line in path.read_text().splitlines()]
+    row=next(r for r in rows if r["method"]=="overlay")
+    row["args"][1]+=difference
+    path.write_text("\n".join(json.dumps(r) for r in rows)+"\n")
+    integrity=json.loads((folder/"integrity.json").read_text())
+    integrity["broker.jsonl"]=hashlib.sha256(path.read_bytes()).hexdigest()
+    (folder/"integrity.json").write_text(json.dumps(integrity))
+    result=verify_recorded_cycle(folder)
+    assert result["status"]=="MISMATCH"
+    assert "observed overlay" in result["error"]
+    assert result["signal_rounding"]==[]
+
+
+def test_legacy_diagnostic_tolerance_never_changes_order_arguments():
+    from trading_bot.broker.evidence import PlaybackClient,ReplayMismatch
+    client=PlaybackClient([{"method":"submit_order","args":[1.],"kwargs":{}}],legacy_signal_diagnostics=True)
+    with pytest.raises(ReplayMismatch):client.consume("submit_order",1.+1e-12)
+
+
+def test_recorded_later_quote_uses_observation_time_during_fill_comparison():
+    plan,frames,_=fixture()
+    snap=snapshot(plan)
+    prices={s:130. for s in frames}
+    quotes=tick(plan,"09:35")["quotes"]
+    baseline=replay_cycle(snap,frames,prices,quotes=quotes)
+    fills=[{"symbol":o["symbol"],"side":o["side"],"qty":float(o["qty"]),
+            "filled_qty":float(o["filled_qty"]),"price":float(o["filled_avg_price"]),"status":"filled"}
+           for o in baseline["orders"]]
+    later=tick(plan,"09:38")["quotes"]
+    for q in later.values():q["observed_at"]=plan["session"]+"T09:38:01-05:00"
+    comparison=replay_cycle(snap,frames,prices,quotes=later,fills=fills)
+    assert comparison["cash"]==pytest.approx(baseline["cash"])
+    # These timestamps are not usable for a forward decision at 09:35.
+    with pytest.raises(RuntimeError):replay_cycle(snap,frames,prices,quotes=later)
+
+
+def test_validation_repair_continues_every_book_and_open_pead_position(tmp_path):
+    from trading_bot.forward_lab import continue_books, ForwardEvidenceError
+    plan,_,marks=fixture(pead=True)
+    old=tmp_path/"cohorts"/"old"
+    manifest={"cohort":"old","start_after":"2026-11-11"}
+    sealed=seal_decisions(old,manifest,{s.name:{} for s in EXPERIMENTS},plan["symbols"],
+        at="2026-11-12T09:20:00-05:00",execution=plan["execution"],pead=plan["pead"])
+    for minute in ("09:35","09:40"):
+        row=tick(sealed,minute);capture_tick(old,sealed,row["quotes"],at=row["at"])
+    assert settle_session(old,manifest,sealed,marks,observed_at="2026-11-12T16:10:00-05:00")==22
+    continued=continue_books(tmp_path,{"cohort":"new","start_after":"2026-11-12"},"old",at="2026-11-12T22:00:00Z")
+    assert len(continued["continuation"]["sources"])==22
+    old_pead=observations(old,"pead_10pct")[0]["book_after"]
+    assert len(old_pead["pead_state"]["positions"])==2
+    assert continued["opening_books"]["5"]["pead_10pct"]==old_pead
+    assert old_pead["previous_equity"]<100000
+    next_plan,_,next_marks=fixture(day="2026-11-13",pead=True)
+    new=tmp_path/"cohorts"/"new"
+    sealed_next=seal_decisions(new,continued,{s.name:{} for s in EXPERIMENTS},next_plan["symbols"],
+        at="2026-11-13T09:20:00-05:00",execution=next_plan["execution"],pead=next_plan["pead"])
+    for minute in ("09:35","09:40"):
+        row=tick(sealed_next,minute);capture_tick(new,sealed_next,row["quotes"],at=row["at"])
+    assert settle_session(new,continued,sealed_next,next_marks,observed_at="2026-11-13T16:10:00-05:00")==22
+    for cost in (5,25):
+        for spec in EXPERIMENTS:
+            row=observations(new,spec.name,cost)[0]
+            assert row["book_before"]==observations(old,spec.name,cost)[0]["book_after"]
+    with pytest.raises(ForwardEvidenceError,match="active cohort"):
+        continue_books(tmp_path,continued,"old",at="2026-11-13T22:00:00Z")
+
+
+def test_continuation_refuses_to_select_only_some_candidates(tmp_path):
+    from trading_bot.forward_lab import continue_books,ForwardEvidenceError
+    with pytest.raises(ForwardEvidenceError,match="all candidates"):
+        continue_books(tmp_path,{"cohort":"new","start_after":"2026-11-12"},"old",at="2026-11-12T22:00:00Z")
+
+
 def revise_metadata(folder,change):
     path=folder/"metadata.json"
     meta=json.loads(path.read_text());change(meta);path.write_text(json.dumps(meta))
@@ -308,7 +437,7 @@ def test_lightweight_quote_client_is_bounded_and_read_only(monkeypatch):
     monkeypatch.setattr(requests,"get",get)
     assert collector.fetch_quotes(["AAPL"])["AAPL"]["bid"]==100.
     assert calls[0][0]=="https://data.alpaca.markets/v2/stocks/quotes/latest"
-    assert calls[0][1]["timeout"]==(5,15) and calls[0][1]["params"]["feed"]=="iex"
+    assert calls[0][1]["timeout"]==(3,6) and calls[0][1]["params"]["feed"]=="iex"
 
 
 def test_quiet_bil_quotes_can_mark_cash_holdings_but_cannot_fill_orders():
