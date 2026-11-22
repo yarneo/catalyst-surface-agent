@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ asset_v() }}">
 </head>
 <body>
   <header class="topbar">
@@ -16,10 +16,10 @@
         <div class="brand-mark">🚀</div>
         <div>
           <div class="brand-name">Yarden's AI Trader</div>
-          <div class="brand-sub">adaptive multi-sleeve portfolio</div>
+          <div class="brand-sub">private paper portfolio</div>
         </div>
       </div>
-      <nav class="nav" id="nav" role="tablist"></nav>
+      <nav class="nav" id="nav" role="tablist" aria-label="Dashboard views"></nav>
     </div>
   </header>
 
@@ -33,8 +33,11 @@
   <script src="/static/js/data.js?v={{ asset_v() }}"></script>
   <script src="/static/js/ui.js?v={{ asset_v() }}"></script>
   <script src="/static/js/charts.js?v={{ asset_v() }}"></script>
+  <script src="/static/js/dashboard-model.js?v={{ asset_v() }}"></script>
+  <script src="/static/js/overview.js?v={{ asset_v() }}"></script>
   <script src="/static/js/live.js?v={{ asset_v() }}"></script>
   <script src="/static/js/strategy.js?v={{ asset_v() }}"></script>
+  <script src="/static/js/research.js?v={{ asset_v() }}"></script>
   <script src="/static/js/crash.js?v={{ asset_v() }}"></script>
   <script src="/static/js/pead.js?v={{ asset_v() }}"></script>
   <script src="/static/js/app.js?v={{ asset_v() }}"></script>

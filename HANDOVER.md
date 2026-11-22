@@ -48,7 +48,7 @@ the close. Five successful observed opens including an order are required;
 strategy review also requires 60 complete sessions, 12 weekly blocks, both cost
 assumptions, and positive evidence. PEAD additionally needs a completed funded
 outcome. Engineering is implemented; validation is pending actual observations.
-The Experiments tab reports both states. Missing quotes or failed comparisons
+The Research tab reports both states. Missing quotes or failed comparisons
 remain explicit and cannot be fixed by silently relaxing the gates.
 
 The November validation repair preserves full floating-point price precision.
@@ -59,6 +59,17 @@ Delayed quotes never replace fresh executable quotes. Persistent IEX coverage
 gaps remain a data-access limitation, not a claim that more days alone will fix
 the lab. Explicit whole-family continuation retains every virtual book and open
 PEAD position across this repair; see the hardening register for the command.
+
+The private portfolio dashboard now opens on **Overview**: account value,
+last-session and five-session changes, current holdings, strategy status and
+the next scheduled checks. Closed-market day changes come from completed
+closes, not the broker's reset intraday field. **Research** explains the
+validation counters and preserves earlier experimental results. **Details**
+keeps trade records, risk, income and diagnostics behind expandable sections.
+The old `#live`, `#strategy` and `#crash` links remain valid. UI changes do not
+alter strategy rules or research fingerprints. Run the presentation-model
+checks with `node --test tests/dashboard_model.test.cjs`; use synthetic fixtures
+only and keep private preview data/screenshots outside this repository.
 
 ## Historical event deployment
 

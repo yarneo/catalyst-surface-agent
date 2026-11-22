@@ -1,13 +1,11 @@
-async function renderStrategy() {
+async function renderResearchEvidence(lab, ai = {}, options = {}) {
   const body = h("div", h("p.dim", "Loading frozen experiments…"));
-  const root = h("section.tab", {id:"tab-strategy",role:"tabpanel"},
+  const root = h("div.research-evidence",
     h("div.section", sectionHead("Which changes earn a place in the portfolio?",
-      "Fixed experiments compare risk budgets, recovery rules and diversification. Broker performance is on the Live tab."),body));
+      "Fixed experiments compare risk budgets, recovery rules and diversification. Account performance is on Overview."),body));
   root._charts=()=>{};
   root._asyncReady=(async()=>{
     try {
-      const [lab,ai,options]=await Promise.all([
-        getJSON("/api/portfolio_lab"),getJSON("/api/ai_attribution"),getJSON("/api/event_options_shadow")]);
       body.replaceChildren();
       const pct=v=>v==null?"—":(v*100).toFixed(2)+"%";
       const candidates=lab.candidates||[];

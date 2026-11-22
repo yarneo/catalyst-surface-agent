@@ -4,12 +4,12 @@
 function fmtUSD(n) { return "$" + Math.round(n).toLocaleString("en-US"); }
 
 async function renderLive() {
-  const root = h("section.tab", { id: "tab-live", role: "tabpanel" },
+  const root = h("section.tab", { id: "tab-crash", role: "tabpanel", "aria-labelledby":"nav-crash" },
     h("div.section",
       h("div.section-head",
-        h("p.eyebrow", "Live · updated just now"),
-        h("h1.h-lg", "Today at a glance"),
-        h("p.lead", "A quick read on what the bot is worth, how it's allocated, and whether each sub-strategy is healthy.")),
+        h("p.eyebrow", "Look closer"),
+        h("h1.h-lg", "Details & records"),
+        h("p.lead", "Open just the area you want to inspect. Account performance and current status are on Overview.")),
       h("div", { id: "live-body" }, h("p.dim", { style: "padding:24px 0" }, "Loading live data…")))
   );
 
@@ -401,7 +401,7 @@ async function renderLive() {
         ),
         rg.needsBuy ? h("div.callout.warn.mt-16",
           h("span.ci", "⏱"),
-          h("span", "Trend is ON but QLD isn't bought yet — the next scheduled run (14:15 UTC, weekdays) will place the buy.")) : null
+          h("span", "The trend condition passes, but an entry still requires the strategy risk checks, current allocation and execution checks to pass at the next portfolio review.")) : null
       );
     }
 
@@ -690,33 +690,27 @@ async function renderLive() {
             h("span", pr.reason || "Building enough aligned price history for the current holdings.")));
 
     /* ---- assemble ---- */
-    body.appendChild(strip);
-    if (valuationNote) body.appendChild(valuationNote);
-    body.appendChild(h("div.section",operationalNote));
-    body.appendChild(h("div.section",labCard));
-    body.appendChild(h("div.section",
-      sectionHead("Strategy control tower",
-        "One view of every capital route, disabled strategy, AI measurement, and shadow challenger — including what each sees now and what it will do next.",
-        "Bird’s-eye view"),
-      towerCard));
-    body.appendChild(h("div.section",
-      sectionHead(h("span", "Strategy health"),
-        h("p.caption", "The bot runs three ", term("sleeves", "sleeve"),
-          " (ETF mean-reversion, QLD-regime, and the managed-futures idle router), plus a cash park. Crypto and PEAD are disabled pending validation. Each is graded and automatically dialed up or down, with idle capital routed by the regime-aware split router. Hover any underlined term for a plain-English definition."),
-        "Self-checking"),
-      governanceNote,
-      h("div.grid.cols-3", sleeveCards)));
-    body.appendChild(h("div.section", h("div.grid.cols-2", pvCard, ddCard)));
-    body.appendChild(h("div.section", vsCard));
-    body.appendChild(h("div.section", h("div.grid.cols-2-bias", regimeCard, allocCard)));
-    body.appendChild(h("div.section", incomeCard));
-    body.appendChild(h("div.section", attributionCard));
-    body.appendChild(h("div.section", riskCard));
-    body.appendChild(h("div.section", h("div.grid.cols-2", aiCard, executionCard)));
-    body.appendChild(h("div.section", shadowCard));
-    body.appendChild(h("div.section", eventShadowCard));
-    body.appendChild(h("div.section", posCard));
-    body.appendChild(h("div.section", orderCard));
+    const grouped = (...cards) => cards.filter(Boolean).map(card=>h("div.detail-block",card));
+    body.appendChild(dashboardDisclosure("Holdings & recent trades", "Quantities, entry prices, filled orders and sale results.", ...grouped(posCard,orderCard)));
+    body.appendChild(dashboardDisclosure("Profit breakdown & income", "Strategy contributions, credited dividends and trading costs.", ...grouped(attributionCard,incomeCard,executionCard)));
+    body.appendChild(dashboardDisclosure("Strategy rules & allocation", "Why each strategy is active or paused, and how capital is assigned.",
+      ...grouped(towerCard,governanceNote,h("div.grid.cols-3",sleeveCards),h("div.grid.cols-2",regimeCard,allocCard))));
+    body.appendChild(dashboardDisclosure("Account history & deployment", "Account value, declines from its peak, market comparisons and deployment dates.",
+      ...grouped(valuationNote,h("div.grid.cols-2",pvCard,ddCard),vsCard)));
+    const riskDetails = dashboardDisclosure("Risk estimates & stress scenarios", "How current holdings could behave in a large market move.");
+    let riskMounted=false;
+    riskDetails.addEventListener("toggle",async()=>{
+      if(!riskDetails.open||riskMounted)return;
+      riskMounted=true;
+      const riskNode=await renderCrash();
+      riskNode.className="detail-block";
+      riskNode.removeAttribute("id");
+      riskNode.removeAttribute("role");
+      riskDetails.querySelector(".disclosure-body").appendChild(riskNode);
+    });
+    body.appendChild(riskDetails);
+    body.appendChild(dashboardDisclosure("AI & experimental diagnostics", "Full evidence behind the Research summaries.", ...grouped(labCard,aiCard,shadowCard,eventShadowCard)));
+    body.appendChild(dashboardDisclosure("Automation checks", "Scheduled cycles, reconciliation and release diagnostics.",operationalNote));
 
     // build charts now that nodes are in the DOM
     if (pvCanvas) {
